@@ -1,0 +1,43 @@
+# Python
+__pycache__/
+*.pyc
+*.pyo
+.venv/
+*.egg-info/
+.pytest_cache/
+dist/
+build/
+*.egg
+
+# Node
+node_modules/
+frontend/dist/
+.npm/
+
+# Rust / Tauri
+src-tauri/target/
+
+# Database
+*.db
+*.db-shm
+*.db-wal
+
+# Editors
+.idea/
+.vscode/
+*.swp
+*.swo
+*~
+
+# macOS
+.DS_Store
+.AppleDouble
+.LSOverride
+
+# Environment
+.env
+.env.local
+.env.*.local
+
+# Logs
+*.log

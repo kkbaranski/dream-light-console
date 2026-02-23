@@ -1,0 +1,40 @@
+import { api } from "../../api/client";
+import { useDMXStore } from "../../store/dmxStore";
+
+interface ChannelFaderProps {
+  channel: number; // 1-indexed
+  value: number;   // 0-255
+}
+
+export function ChannelFader({ channel, value }: ChannelFaderProps) {
+  const setChannel = useDMXStore((s) => s.setChannel);
+
+  async function handleChange(e: React.ChangeEvent<HTMLInputElement>): Promise<void> {
+    const newValue = Number(e.target.value);
+    setChannel(channel - 1, newValue); // optimistic update
+    try {
+      await api.put(`/universes/1/channels/${channel}`, { value: newValue });
+    } catch {
+      // silently ignore; the WebSocket will correct state on next tick
+    }
+  }
+
+  return (
+    <div className="flex flex-col items-center gap-1 w-10">
+      <span className="text-gray-400 text-xs">{channel}</span>
+      <div className="relative h-32 flex items-center justify-center">
+        <input
+          type="range"
+          min={0}
+          max={255}
+          value={value}
+          onChange={(e) => void handleChange(e)}
+          className="appearance-none w-28 h-2 bg-gray-700 rounded-lg cursor-pointer accent-blue-500"
+          style={{ writingMode: "vertical-lr", direction: "rtl" }}
+          aria-label={`Channel ${channel}`}
+        />
+      </div>
+      <span className="text-gray-300 text-xs font-mono">{value}</span>
+    </div>
+  );
+}

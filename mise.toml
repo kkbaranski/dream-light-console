@@ -1,0 +1,124 @@
+[tools]
+node = "20"
+
+[env]
+BACKEND_DIR = "{{config_root}}/backend"
+FRONTEND_DIR = "{{config_root}}/frontend"
+TAURI_DIR = "{{config_root}}/src-tauri"
+
+# ── Backend tasks ──────────────────────────────────────────────────────────────
+
+[tasks.backend-install]
+description = "Install Python dependencies into backend/.venv"
+run = "uv sync --directory {{env.BACKEND_DIR}} --extra dev"
+
+[tasks.backend-dev]
+description = "Start the FastAPI backend in development mode (auto-reload)"
+run = "uv run --directory {{env.BACKEND_DIR}} uvicorn dream_light_console.main:app --host 127.0.0.1 --port 8765 --reload --reload-dir src"
+
+[tasks.backend-test]
+description = "Run backend tests"
+run = "uv run --directory {{env.BACKEND_DIR}} pytest -v"
+
+[tasks.backend-test-watch]
+description = "Run backend tests in watch mode"
+run = "uv run --directory {{env.BACKEND_DIR}} ptw -- -v"
+
+[tasks.backend-lint]
+description = "Lint and format check the backend"
+run = "uv run --directory {{env.BACKEND_DIR}} ruff check src tests && uv run --directory {{env.BACKEND_DIR}} ruff format --check src tests"
+
+[tasks.backend-fmt]
+description = "Auto-format backend code"
+run = "uv run --directory {{env.BACKEND_DIR}} ruff format src tests"
+
+# ── Frontend tasks ─────────────────────────────────────────────────────────────
+
+[tasks.frontend-install]
+description = "Install npm dependencies"
+run = "cd {{env.FRONTEND_DIR}} && npm install"
+
+[tasks.frontend-dev]
+description = "Start the Vite dev server"
+run = "cd {{env.FRONTEND_DIR}} && npm run dev"
+
+[tasks.frontend-build]
+description = "Build the frontend for production"
+run = "cd {{env.FRONTEND_DIR}} && npm run build"
+
+[tasks.frontend-lint]
+description = "Lint the frontend"
+run = "cd {{env.FRONTEND_DIR}} && npm run lint"
+
+# ── Composite dev tasks ────────────────────────────────────────────────────────
+
+[tasks.dev]
+description = "Start backend + frontend together for web development (no Tauri)"
+run = """
+mise run backend-dev &
+BACKEND_PID=$!
+mise run frontend-dev &
+FRONTEND_PID=$!
+trap "kill $BACKEND_PID $FRONTEND_PID" EXIT INT TERM
+wait
+"""
+
+[tasks.tauri-dev]
+description = "Start the full Tauri desktop app in development mode"
+run = "cd {{env.TAURI_DIR}} && cargo tauri dev"
+
+[tasks.tauri-build]
+description = "Build the full Tauri desktop app for distribution"
+run = "cd {{env.TAURI_DIR}} && cargo tauri build"
+
+# ── Setup tasks ────────────────────────────────────────────────────────────────
+
+[tasks.install]
+description = "Install ALL dependencies (Python + npm + Rust tools)"
+depends = ["backend-install", "frontend-install"]
+run = """
+echo "Checking Rust + Tauri CLI..."
+cargo install tauri-cli --version '^2' 2>/dev/null || true
+echo "All dependencies installed."
+"""
+
+[tasks.setup]
+description = "One-time project setup: install deps and verify environment"
+depends = ["install"]
+run = """
+echo ""
+echo "Dream Light Console setup complete."
+echo ""
+echo "Quick start (web mode, no Tauri):"
+echo "  mise run dev"
+echo ""
+echo "Quick start (full desktop app):"
+echo "  mise run tauri-dev"
+echo ""
+echo "Backend only:"
+echo "  mise run backend-dev"
+echo ""
+echo "Frontend only:"
+echo "  mise run frontend-dev"
+echo ""
+"""
+
+# ── Utility tasks ──────────────────────────────────────────────────────────────
+
+[tasks.clean]
+description = "Remove all build artifacts"
+run = """
+rm -rf backend/.venv backend/__pycache__ backend/src/dream_light_console/__pycache__
+rm -rf frontend/dist frontend/node_modules/.vite
+rm -rf src-tauri/target
+echo "Cleaned."
+"""
+
+[tasks.check]
+description = "Run all linters and tests"
+depends = ["backend-lint", "backend-test", "frontend-lint"]
+run = "echo 'All checks passed.'"
+
+[tasks.logs]
+description = "Show recent SQLite schema (useful for debugging)"
+run = "sqlite3 backend/dream_light_console.db .schema 2>/dev/null || echo 'No database yet. Run backend-dev first.'"

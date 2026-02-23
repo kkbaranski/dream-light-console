@@ -1,0 +1,16 @@
+[package]
+name = "dream-light-console"
+version = "0.1.0"
+edition = "2021"
+
+[lib]
+name = "dream_light_console_lib"
+crate-type = ["staticlib", "cdylib", "rlib"]
+
+[dependencies]
+tauri = { version = "2", features = ["shell-sidecar"] }
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
+
+[build-dependencies]
+tauri-build = { version = "2", features = [] }
