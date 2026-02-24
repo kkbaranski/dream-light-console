@@ -1,42 +1,46 @@
 import { NavLink } from "react-router-dom";
 
-interface NavItem {
+interface NavigationItem {
   to: string;
   label: string;
-  icon: string;
-  comingSoon?: boolean;
+  disabled?: boolean;
 }
 
-const navItems: NavItem[] = [
-  { to: "/", label: "Dashboard", icon: "⊞" },
-  { to: "/stage", label: "Stage Editor", icon: "◫" },
-  { to: "/fixtures", label: "Fixtures", icon: "💡", comingSoon: true },
-  { to: "/scenes", label: "Scenes", icon: "🎬" },
+const navigationItems: NavigationItem[] = [
+  { to: "/stages", label: "Stages" },
+  { to: "/songs", label: "Songs", disabled: true },
+  { to: "/concerts", label: "Concerts", disabled: true },
+  { to: "/devices", label: "Devices", disabled: true },
 ];
 
 export function Sidebar() {
   return (
-    <nav className="w-56 bg-gray-900 border-r border-gray-700 flex flex-col py-4">
-      {navItems.map((item) => (
-        <NavLink
-          key={item.to}
-          to={item.to}
-          end={item.to === "/"}
-          className={({ isActive }) =>
-            `flex items-center gap-3 px-4 py-3 text-sm transition-colors ${
-              isActive
-                ? "bg-gray-700 text-white"
-                : "text-gray-400 hover:bg-gray-800 hover:text-gray-200"
-            } ${item.comingSoon ? "opacity-50 pointer-events-none" : ""}`
-          }
-        >
-          <span className="text-base">{item.icon}</span>
-          <span>{item.label}</span>
-          {item.comingSoon && (
-            <span className="ml-auto text-xs text-gray-500">soon</span>
-          )}
-        </NavLink>
-      ))}
+    <nav className="w-48 bg-gray-900 border-r border-gray-800 flex flex-col pt-2 flex-shrink-0">
+      {navigationItems.map((item) =>
+        item.disabled ? (
+          <div
+            key={item.to}
+            className="px-4 py-2.5 text-sm text-gray-600 flex items-center justify-between"
+          >
+            <span>{item.label}</span>
+            <span className="text-xs text-gray-700">soon</span>
+          </div>
+        ) : (
+          <NavLink
+            key={item.to}
+            to={item.to}
+            className={({ isActive }) =>
+              `px-4 py-2.5 text-sm transition-colors ${
+                isActive
+                  ? "text-white bg-gray-800"
+                  : "text-gray-400 hover:text-gray-200 hover:bg-gray-800/60"
+              }`
+            }
+          >
+            {item.label}
+          </NavLink>
+        ),
+      )}
     </nav>
   );
 }
