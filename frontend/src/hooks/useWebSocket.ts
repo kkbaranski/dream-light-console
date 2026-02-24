@@ -6,10 +6,10 @@ const WS_URL = "ws://127.0.0.1:8765/ws";
 const RECONNECT_DELAY_MS = 2000;
 
 export function useWebSocket(): void {
-  const setChannels = useDMXStore((s) => s.setChannels);
-  const setConnected = useDMXStore((s) => s.setConnected);
-  const setLatencyMs = useDMXStore((s) => s.setLatencyMs);
-  const _bindControls = useDMXStore((s) => s._bindControls);
+  const setChannels = useDMXStore((state) => state.setChannels);
+  const setConnected = useDMXStore((state) => state.setConnected);
+  const setLatencyMs = useDMXStore((state) => state.setLatencyMs);
+  const _bindControls = useDMXStore((state) => state._bindControls);
 
   const wsRef = useRef<WebSocket | null>(null);
   const reconnectTimer = useRef<ReturnType<typeof setTimeout> | null>(null);

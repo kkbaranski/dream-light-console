@@ -5,8 +5,8 @@ import { useDMXStore } from "../store/dmxStore";
 const POLL_INTERVAL_MS = 3000;
 
 export function useApi(): { backendOnline: boolean } {
-  const setBackendOnline = useDMXStore((s) => s.setBackendOnline);
-  const backendOnline = useDMXStore((s) => s.backendOnline);
+  const setBackendOnline = useDMXStore((state) => state.setBackendOnline);
+  const backendOnline = useDMXStore((state) => state.backendOnline);
 
   useEffect(() => {
     async function checkHealth(): Promise<void> {

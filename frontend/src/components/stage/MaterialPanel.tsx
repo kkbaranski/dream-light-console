@@ -7,6 +7,7 @@ import {
   type MaterialDefinition,
 } from "../../materials/registry";
 import { stageDefinitions, type StageDefinition } from "../../stages/registry";
+import { LightInspector } from "./LightInspector";
 
 function TileSizeSlider({
   value,
@@ -24,7 +25,7 @@ function TileSizeSlider({
         max={15}
         step={0.1}
         value={value}
-        onChange={(e) => onChange(Number(e.target.value))}
+        onChange={(event) => onChange(Number(event.target.value))}
         className="flex-1 accent-blue-500"
       />
       <span className="text-xs text-gray-400 w-8 text-right">{value.toFixed(1)}×</span>
@@ -130,10 +131,9 @@ function LightCatalogItem() {
   );
 }
 
-function StageThumbnail({ index }: { stage: StageDefinition; index: number }) {
+function StageThumbnail({ index }: { index: number }) {
   return (
     <div className="w-full h-10 rounded bg-gray-800 flex items-end justify-center pb-1.5">
-      {/* Simplified stage silhouette: two truss legs + platform */}
       <div className="flex items-end gap-0.5">
         <div className="w-2 h-5 bg-gray-500 rounded-t-sm" />
         <div className="w-10 h-1.5 bg-gray-500 rounded-t-sm" />
@@ -166,135 +166,11 @@ function StageOption({
           : "border-gray-700 hover:border-gray-500"
       }`}
     >
-      <StageThumbnail stage={stage} index={index} />
+      <StageThumbnail index={index} />
       <span className="text-xs text-gray-300 leading-tight truncate w-full">
         {stage.name}
       </span>
     </button>
-  );
-}
-
-function DMXSlider({
-  label,
-  value,
-  onChange,
-}: {
-  label: string;
-  value: number;
-  onChange: (value: number) => void;
-}) {
-  return (
-    <div className="flex flex-col gap-0.5">
-      <div className="flex items-center justify-between px-0.5">
-        <span className="text-xs text-gray-500">{label}</span>
-        <span className="text-xs text-gray-400 font-mono w-7 text-right">{value}</span>
-      </div>
-      <input
-        type="range"
-        min={0}
-        max={255}
-        step={1}
-        value={value}
-        onChange={(event) => onChange(Number(event.target.value))}
-        className="w-full accent-blue-500"
-      />
-    </div>
-  );
-}
-
-function LightInspectorSection() {
-  const selectedLightId = useStageEditorStore((state) => state.selectedLightId);
-  const placedLights = useStageEditorStore((state) => state.placedLights);
-  const updateLight = useStageEditorStore((state) => state.updateLight);
-
-  const light = placedLights.find((l) => l.id === selectedLightId);
-  if (!light) return null;
-
-  return (
-    <CollapsibleSection title="Selected Light">
-      <div className="flex flex-col gap-3 px-1">
-        <div className="flex items-center gap-2">
-          <span className="text-xs text-gray-500 w-14 flex-shrink-0">Name</span>
-          <input
-            type="text"
-            value={light.name}
-            onChange={(event) => updateLight(light.id, { name: event.target.value })}
-            className="flex-1 bg-gray-800 text-xs text-gray-200 rounded px-2 py-1 border border-gray-700 focus:border-blue-500 outline-none"
-          />
-        </div>
-
-        <div className="flex items-center gap-2">
-          <span className="text-xs text-gray-500 w-14 flex-shrink-0">Universe</span>
-          <input
-            type="number"
-            min={1}
-            max={16}
-            value={light.universe}
-            onChange={(event) =>
-              updateLight(light.id, { universe: Math.max(1, Number(event.target.value)) })
-            }
-            className="w-16 bg-gray-800 text-xs text-gray-200 rounded px-2 py-1 border border-gray-700 focus:border-blue-500 outline-none"
-          />
-        </div>
-
-        <div className="flex items-center gap-2">
-          <span className="text-xs text-gray-500 w-14 flex-shrink-0">Channel</span>
-          <input
-            type="number"
-            min={1}
-            max={512}
-            value={light.startChannel}
-            onChange={(event) =>
-              updateLight(light.id, { startChannel: Math.max(1, Number(event.target.value)) })
-            }
-            className="w-16 bg-gray-800 text-xs text-gray-200 rounded px-2 py-1 border border-gray-700 focus:border-blue-500 outline-none"
-          />
-        </div>
-
-        <div className="flex items-center gap-2">
-          <span className="text-xs text-gray-500 w-14 flex-shrink-0">Color</span>
-          <input
-            type="color"
-            value={light.color}
-            onChange={(event) => updateLight(light.id, { color: event.target.value })}
-            className="w-8 h-6 rounded cursor-pointer border-0 bg-transparent p-0"
-          />
-          <span className="text-xs text-gray-400 font-mono">{light.color}</span>
-        </div>
-
-        <DMXSlider
-          label="Dimmer"
-          value={light.dimmer}
-          onChange={(value) => updateLight(light.id, { dimmer: value })}
-        />
-        <DMXSlider
-          label="Pan"
-          value={light.pan}
-          onChange={(value) => updateLight(light.id, { pan: value })}
-        />
-        <DMXSlider
-          label="Tilt"
-          value={light.tilt}
-          onChange={(value) => updateLight(light.id, { tilt: value })}
-        />
-
-        <div className="flex flex-col gap-0.5">
-          <div className="flex items-center justify-between px-0.5">
-            <span className="text-xs text-gray-500">Beam angle</span>
-            <span className="text-xs text-gray-400 font-mono w-10 text-right">{light.coneAngle}°</span>
-          </div>
-          <input
-            type="range"
-            min={1}
-            max={60}
-            step={1}
-            value={light.coneAngle}
-            onChange={(event) => updateLight(light.id, { coneAngle: Number(event.target.value) })}
-            className="w-full accent-blue-500"
-          />
-        </div>
-      </div>
-    </CollapsibleSection>
   );
 }
 
@@ -318,7 +194,7 @@ export function MaterialPanel() {
         </h2>
       </div>
 
-      <LightInspectorSection />
+      <LightInspector />
 
       <CollapsibleSection title="Lights">
         <p className="text-xs text-gray-500 mb-2">Drag onto the canvas to place</p>

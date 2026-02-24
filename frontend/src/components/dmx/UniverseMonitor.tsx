@@ -2,7 +2,7 @@ import { useDMXStore } from "../../store/dmxStore";
 import { ChannelFader } from "./ChannelFader";
 
 export function UniverseMonitor() {
-  const channels = useDMXStore((s) => s.channels);
+  const channels = useDMXStore((state) => state.channels);
 
   return (
     <div className="bg-gray-800 rounded-lg p-4">

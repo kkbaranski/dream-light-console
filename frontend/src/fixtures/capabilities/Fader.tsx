@@ -18,9 +18,8 @@ export function Fader({ label, value, onChange }: FaderProps) {
         min={0}
         max={255}
         value={value}
-        onChange={(e) => onChange(Number(e.target.value))}
-        className="w-full h-2 rounded-lg cursor-pointer accent-blue-500"
-        style={{ backgroundColor: "#374151" }}
+        onChange={(event) => onChange(Number(event.target.value))}
+        className="w-full h-2 rounded-lg cursor-pointer accent-blue-500 bg-gray-700"
       />
     </div>
   );

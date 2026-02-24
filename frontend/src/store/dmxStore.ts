@@ -37,8 +37,8 @@ export const useDMXStore = create<DMXStore>((set) => ({
       next[index] = value;
       return { channels: next };
     }),
-  setConnected: (v) => set({ isConnected: v }),
-  setBackendOnline: (v) => set({ backendOnline: v }),
-  setLatencyMs: (ms) => set({ latencyMs: ms }),
+  setConnected: (isConnected) => set({ isConnected }),
+  setBackendOnline: (backendOnline) => set({ backendOnline }),
+  setLatencyMs: (latencyMs) => set({ latencyMs }),
   _bindControls: (sendControl, sendPing) => set({ sendControl, sendPing }),
 }));

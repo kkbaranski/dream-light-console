@@ -17,7 +17,7 @@ function StageNotFound() {
 
 export function StageEditorPage() {
   const { id } = useParams<{ id: string }>();
-  const stage = useStagesStore((state) => state.stages.find((s) => s.id === id));
+  const stage = useStagesStore((state) => state.stages.find((stageItem) => stageItem.id === id));
 
   if (!stage) return <StageNotFound />;
 

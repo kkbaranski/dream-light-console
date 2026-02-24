@@ -3,6 +3,7 @@ import { useNavigate } from "react-router-dom";
 import { useStagesStore } from "../store/stagesStore";
 import { Sidebar } from "../components/layout/Sidebar";
 import type { Stage } from "../store/stagesStore";
+import * as React from "react";
 
 function CreateStageDialog({ onClose }: { onClose: () => void }) {
   const createStage = useStagesStore((state) => state.createStage);
@@ -106,7 +107,6 @@ export function StagesPage() {
       <main className="flex-1 overflow-y-auto">
         <div className="max-w-5xl mx-auto px-8 py-8">
           <div className="flex items-center justify-between mb-8">
-            <h1 className="text-xl font-semibold text-white">Stages</h1>
             {stages.length > 0 && (
               <button
                 onClick={() => setIsCreating(true)}

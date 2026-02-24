@@ -13,9 +13,7 @@ import {
 import { findStageDefinition } from "../../stages/registry";
 import { StageModel } from "./StageModel";
 import { PlacedLights } from "./PlacedLights";
-
-const BACKGROUND_COLOR = "#20232c";
-const WALL_Z = -10;
+import { WALL_Z, BACKGROUND_COLOR } from "./sceneConstants";
 
 // ---------------------------------------------------------------------------
 // Camera constraint — limits horizontal orbit so the camera stays at least
@@ -116,6 +114,10 @@ class TextureErrorBoundary extends Component<
 
   static getDerivedStateFromError() {
     return { hasError: true };
+  }
+
+  componentDidCatch(error: Error, info: React.ErrorInfo) {
+    console.error("Texture loading failed:", error, info.componentStack);
   }
 
   render() {
@@ -223,6 +225,19 @@ export function StageScene() {
   const sceneRef  = useRef<THREE.Scene | null>(null);
   const addLight = useStageEditorStore((state) => state.addLight);
   const setSelectedLight = useStageEditorStore((state) => state.setSelectedLight);
+  const copySelectedLights = useStageEditorStore((state) => state.copySelectedLights);
+  const pasteLights = useStageEditorStore((state) => state.pasteLights);
+
+  useEffect(() => {
+    function handleKeyDown(event: KeyboardEvent) {
+      if (event.target instanceof HTMLInputElement) return;
+      const isMod = event.metaKey || event.ctrlKey;
+      if (isMod && event.key === "c") copySelectedLights();
+      if (isMod && event.key === "v") pasteLights();
+    }
+    window.addEventListener("keydown", handleKeyDown);
+    return () => window.removeEventListener("keydown", handleKeyDown);
+  }, [copySelectedLights, pasteLights]);
 
   function handleDrop(event: React.DragEvent<HTMLDivElement>) {
     const lightType = event.dataTransfer.getData("dlc/light-type");
@@ -237,19 +252,17 @@ export function StageScene() {
     const raycaster = new THREE.Raycaster();
     raycaster.setFromCamera(new THREE.Vector2(ndcX, ndcY), cameraRef.current);
 
-    // Step 1: find the XZ floor position using the infinite floor plane.
     const floorPlane = new THREE.Plane(new THREE.Vector3(0, 1, 0), 0);
     const floorPoint = new THREE.Vector3();
     if (!raycaster.ray.intersectPlane(floorPlane, floorPoint)) return;
 
-    // Step 2: cast a top-down ray from above that floor point.
-    // If the first solid object it hits is NOT the floor mesh, there is a stage
-    // element above that spot — reject the placement.
     const topDown = new THREE.Raycaster(
       new THREE.Vector3(floorPoint.x, 100, floorPoint.z),
       new THREE.Vector3(0, -1, 0),
     );
-    const hits = topDown.intersectObjects(sceneRef.current.children, true);
+    const hits = topDown
+      .intersectObjects(sceneRef.current.children, true)
+      .filter((hit) => !hit.object.userData.isBeam);
     const firstHit = hits[0];
     if (!firstHit?.object.userData.isFloor) return;
 
