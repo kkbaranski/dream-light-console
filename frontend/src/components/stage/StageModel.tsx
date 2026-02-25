@@ -3,7 +3,7 @@ import { useGLTF } from "@react-three/drei";
 import * as THREE from "three";
 import { WALL_Z } from "./sceneConstants";
 
-const GAP_FROM_WALL = 0.3;
+const GAP_FROM_WALL = 3;
 
 function StageModelMesh({ path }: { path: string }) {
   const { scene } = useGLTF(path);

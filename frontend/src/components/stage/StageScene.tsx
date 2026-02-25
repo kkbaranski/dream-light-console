@@ -1,5 +1,5 @@
 import { Component, Suspense, useEffect, useRef, type ReactNode } from "react";
-import { Canvas, useFrame, useThree } from "@react-three/fiber";
+import { Canvas, useThree } from "@react-three/fiber";
 import { OrbitControls, useTexture } from "@react-three/drei";
 import * as THREE from "three";
 import { useStageEditorStore } from "../../store/stageEditorStore";
@@ -13,45 +13,10 @@ import {
 import { findStageDefinition } from "../../stages/registry";
 import { StageModel } from "./StageModel";
 import { PlacedLights } from "./PlacedLights";
-import { WALL_Z, BACKGROUND_COLOR } from "./sceneConstants";
+import { PlacedProps } from "./PlacedProps";
+import { BACKGROUND_COLOR } from "./sceneConstants";
 
-// ---------------------------------------------------------------------------
-// Camera constraint — limits horizontal orbit so the camera stays at least
-// 2 m in front of the back wall (prevents clipping and back-face peeking).
-// ---------------------------------------------------------------------------
-function WallCameraConstraint() {
-  const camera = useThree((state) => state.camera);
-  const controls = useThree((state) => state.controls) as {
-    minAzimuthAngle: number;
-    maxAzimuthAngle: number;
-  } | null;
 
-  useFrame(() => {
-    if (!controls) return;
-
-    const horizontalRadius = Math.sqrt(
-      camera.position.x ** 2 + camera.position.z ** 2,
-    );
-
-    if (horizontalRadius < 0.01) return;
-
-    const cosMaxAzimuth = (WALL_Z + 2) / horizontalRadius;
-
-    if (cosMaxAzimuth < -1) {
-      controls.minAzimuthAngle = -Infinity;
-      controls.maxAzimuthAngle = Infinity;
-    } else {
-      const maxAzimuth = Math.acos(cosMaxAzimuth);
-      controls.minAzimuthAngle = -maxAzimuth;
-      controls.maxAzimuthAngle = maxAzimuth;
-    }
-  });
-
-  return null;
-}
-
-// Writes the current camera into a ref so the drag-drop handler (a DOM event,
-// outside the Canvas) can use it for raycasting without going through state.
 function CameraCapture({
   cameraRef,
 }: {
@@ -187,26 +152,26 @@ function SceneContent() {
       <directionalLight position={[-5, 5, -6]} intensity={0.35} color="#7090bb" />
       <directionalLight position={[0, 10, 20]} intensity={0.8} />
 
-      {/* Stage floor — tagged so drop handler can verify the ray hit empty floor */}
-      <mesh rotation={[-Math.PI / 2, 0, 0]} userData={{ isFloor: true }}>
-        <planeGeometry args={[200, 400]} />
+      {/* Stage floor — box centered at Y=-0.5 so the top face lands exactly at Y=0 */}
+      <mesh position={[0, -0.5, 0]} rotation={[-Math.PI / 2, 0, 0]} userData={{ isFloor: true }}>
+        <boxGeometry args={[70, 150, 1]} />
         <MeshMaterial
           id={floorMaterialId}
           registry={floorMaterials}
           fallbackColor="#1a1a1a"
-          worldSize={[200, 400]}
+          worldSize={[70, 150]}
           tileSize={floorTileSize}
         />
       </mesh>
 
       {/* Infinite back wall */}
-      <mesh position={[0, 30, WALL_Z]}>
-        <planeGeometry args={[200, 200]} />
+      <mesh position={[0, 19.5, -75]} userData={{ isWall: true }}>
+        <boxGeometry args={[70, 40]} />
         <MeshMaterial
           id={wallMaterialId}
           registry={wallMaterials}
           fallbackColor="white"
-          worldSize={[200, 200]}
+          worldSize={[70, 40]}
           tileSize={wallTileSize}
         />
       </mesh>
@@ -214,8 +179,7 @@ function SceneContent() {
       {stageDefinition && <StageModel path={stageDefinition.path} />}
 
       <PlacedLights />
-
-      <WallCameraConstraint />
+      <PlacedProps />
     </>
   );
 }
@@ -223,25 +187,42 @@ function SceneContent() {
 export function StageScene() {
   const cameraRef = useRef<THREE.Camera | null>(null);
   const sceneRef  = useRef<THREE.Scene | null>(null);
-  const addLight = useStageEditorStore((state) => state.addLight);
-  const setSelectedLight = useStageEditorStore((state) => state.setSelectedLight);
-  const copySelectedLights = useStageEditorStore((state) => state.copySelectedLights);
-  const pasteLights = useStageEditorStore((state) => state.pasteLights);
+  const addObject = useStageEditorStore((state) => state.addObject);
+  const clearSelection = useStageEditorStore((state) => state.clearSelection);
+  const copySelected = useStageEditorStore((state) => state.copySelected);
+  const paste = useStageEditorStore((state) => state.paste);
+  const undo = useStageEditorStore((state) => state.undo);
+  const redo = useStageEditorStore((state) => state.redo);
 
   useEffect(() => {
     function handleKeyDown(event: KeyboardEvent) {
-      if (event.target instanceof HTMLInputElement) return;
       const isMod = event.metaKey || event.ctrlKey;
-      if (isMod && event.key === "c") copySelectedLights();
-      if (isMod && event.key === "v") pasteLights();
+      const isTextInput =
+        (event.target instanceof HTMLInputElement && event.target.type !== "range") ||
+        event.target instanceof HTMLTextAreaElement;
+
+      if (!isTextInput) {
+        if (isMod && event.key === "c") copySelected();
+        if (isMod && event.key === "v") paste();
+      }
+
+      if (isMod && !event.shiftKey && event.key === "z") {
+        event.preventDefault();
+        undo();
+      }
+      if (isMod && event.shiftKey && (event.key === "z" || event.key === "Z")) {
+        event.preventDefault();
+        redo();
+      }
     }
     window.addEventListener("keydown", handleKeyDown);
     return () => window.removeEventListener("keydown", handleKeyDown);
-  }, [copySelectedLights, pasteLights]);
+  }, [copySelected, paste, undo, redo]);
 
   function handleDrop(event: React.DragEvent<HTMLDivElement>) {
     const lightType = event.dataTransfer.getData("dlc/light-type");
-    if (!lightType || !cameraRef.current || !sceneRef.current) return;
+    const propType  = event.dataTransfer.getData("dlc/prop-type");
+    if ((!lightType && !propType) || !cameraRef.current || !sceneRef.current) return;
 
     event.preventDefault();
 
@@ -262,15 +243,13 @@ export function StageScene() {
     );
     const hits = topDown
       .intersectObjects(sceneRef.current.children, true)
-      .filter((hit) => !hit.object.userData.isBeam);
+      .filter((hit) => !hit.object.userData.isBeam && !hit.object.userData.isProp);
     const firstHit = hits[0];
     if (!firstHit?.object.userData.isFloor) return;
 
-    addLight({
-      id: crypto.randomUUID(),
-      type: lightType as "moving_head",
-      position: [floorPoint.x, 0, floorPoint.z],
-    });
+    const position: [number, number, number] = [floorPoint.x, 0, floorPoint.z];
+    const type = lightType || propType;
+    addObject({ id: crypto.randomUUID(), type: type as import("../../scene/types").SceneObjectType, position });
   }
 
   return (
@@ -280,25 +259,23 @@ export function StageScene() {
       onDrop={handleDrop}
     >
       <Canvas
-        camera={{ position: [10, 12, 16], fov: 40 }}
-        gl={{ antialias: true }}
+        camera={{ position: [10, 10, 20], fov: 30 }}
+        gl={{ antialias: true, localClippingEnabled: true }}
         onCreated={({ scene }) => {
           scene.background = new THREE.Color(BACKGROUND_COLOR);
         }}
-        onPointerMissed={() => setSelectedLight(null)}
+        onPointerMissed={() => clearSelection()}
       >
         <CameraCapture cameraRef={cameraRef} />
         <SceneCapture sceneRef={sceneRef} />
         <SceneContent />
         <OrbitControls
           makeDefault
-          target={[0, 0, 0]}
           enableDamping
-          dampingFactor={0.06}
-          enablePan={false}
-          minDistance={40}
-          maxDistance={100}
-          maxPolarAngle={Math.PI / 2 - 0.02}
+          minDistance={10}
+          maxDistance={150}
+          maxPolarAngle={Math.PI / 2 - 0.1}
+          screenSpacePanning={false}
         />
       </Canvas>
     </div>
