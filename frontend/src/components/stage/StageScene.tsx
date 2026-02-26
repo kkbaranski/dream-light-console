@@ -148,12 +148,12 @@ function SceneContent() {
   return (
     <>
       <hemisphereLight args={["#4a6080", "#101318", 0.9]} />
-      <directionalLight position={[6, 12, 8]} intensity={1.4} />
+      <directionalLight position={[6, 12, 8]} intensity={1.4} castShadow shadow-mapSize-width={2048} shadow-mapSize-height={2048} />
       <directionalLight position={[-5, 5, -6]} intensity={0.35} color="#7090bb" />
       <directionalLight position={[0, 10, 20]} intensity={0.8} />
 
       {/* Stage floor — box centered at Y=-0.5 so the top face lands exactly at Y=0 */}
-      <mesh position={[0, -0.5, 0]} rotation={[-Math.PI / 2, 0, 0]} userData={{ isFloor: true }}>
+      <mesh position={[0, -0.5, 0]} rotation={[-Math.PI / 2, 0, 0]} userData={{ isFloor: true }} receiveShadow>
         <boxGeometry args={[70, 150, 1]} />
         <MeshMaterial
           id={floorMaterialId}
@@ -165,7 +165,7 @@ function SceneContent() {
       </mesh>
 
       {/* Infinite back wall */}
-      <mesh position={[0, 19.5, -75]} userData={{ isWall: true }}>
+      <mesh position={[0, 19.5, -75]} userData={{ isWall: true }} receiveShadow>
         <boxGeometry args={[70, 40]} />
         <MeshMaterial
           id={wallMaterialId}
@@ -259,7 +259,8 @@ export function StageScene() {
       onDrop={handleDrop}
     >
       <Canvas
-        camera={{ position: [10, 10, 20], fov: 30 }}
+        camera={{ position: [0, 7, 38], fov: 50 }}
+        shadows
         gl={{ antialias: true, localClippingEnabled: true }}
         onCreated={({ scene }) => {
           scene.background = new THREE.Color(BACKGROUND_COLOR);

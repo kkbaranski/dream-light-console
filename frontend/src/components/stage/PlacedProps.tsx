@@ -60,6 +60,8 @@ function PlacedPropMesh({ prop }: { prop: PropObject }) {
         mesh.material = Array.isArray(mesh.material)
           ? mesh.material.map((m: THREE.Material) => m.clone())
           : mesh.material.clone();
+        mesh.castShadow    = true;
+        mesh.receiveShadow = true;
       });
 
       const box = new THREE.Box3().setFromObject(cloned);

@@ -11,6 +11,13 @@ function StageModelMesh({ path }: { path: string }) {
   const [clonedScene, position] = useMemo(() => {
     const cloned = scene.clone(true);
 
+    cloned.traverse((child) => {
+      const mesh = child as THREE.Mesh;
+      if (!mesh.isMesh) return;
+      mesh.castShadow    = true;
+      mesh.receiveShadow = true;
+    });
+
     const box = new THREE.Box3().setFromObject(cloned);
     const center = new THREE.Vector3();
     box.getCenter(center);

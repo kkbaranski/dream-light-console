@@ -6,45 +6,15 @@ import { useStageEditorStore } from "../../store/stageEditorStore";
 import type { LightObject } from "../../store/stageEditorStore";
 import { useObjectDrag } from "../../hooks/useObjectDrag";
 import { MOVING_HEAD_DEF } from "../../devices/movingHead";
-import { WALL_Z } from "./sceneConstants";
 
 useGLTF.preload(MOVING_HEAD_DEF.modelPath);
 
 const DEG = Math.PI / 180;
 const SELECTION_PADDING = 0.08;
 
-// ── Module-level constants (created once, shared across all instances) ────────
-
-// AlphaMap: opaque near the lens (cylinder top, UV v=1), fades out over the
-// last quarter of the beam toward the far end (cylinder bottom, UV v=0).
-const BEAM_FADE_TEXTURE = (() => {
-  const canvas = document.createElement("canvas");
-  canvas.width = 1;
-  canvas.height = 64;
-  const ctx = canvas.getContext("2d")!;
-  const g = ctx.createLinearGradient(0, 0, 0, 64);
-  g.addColorStop(0,    "#000000"); // UV v=0 — far end  → transparent
-  g.addColorStop(0.25, "#ffffff"); // fade zone ends here
-  g.addColorStop(1,    "#ffffff"); // UV v=1 — lens end → opaque
-  ctx.fillStyle = g;
-  ctx.fillRect(0, 0, 1, 64);
-  return new THREE.CanvasTexture(canvas);
-})();
-
-// Clipping planes prevent the beam cone from penetrating the floor (Y < 0)
-// and the back wall (Z < WALL_Z).
-// Requires <Canvas gl={{ localClippingEnabled: true }}> in StageScene.
-const BEAM_CLIP_PLANES = [
-  new THREE.Plane(new THREE.Vector3(0, 1, 0), 0),        // clips below floor
-  new THREE.Plane(new THREE.Vector3(0, 0, 1), -WALL_Z),  // clips behind wall
-];
-
-// ── Per-instance mesh ─────────────────────────────────────────────────────────
-
 function MovingHeadMesh({ light }: { light: LightObject }) {
   const isSelected = useStageEditorStore((s) => s.selectedIds.includes(light.id));
 
-  // Coordinate overlay fades in on drag start, fades out on drag end.
   const [coordsVisible, setCoordsVisible] = useState(false);
   const [coordsOpacity, setCoordsOpacity] = useState(1);
   const fadeTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
@@ -76,30 +46,26 @@ function MovingHeadMesh({ light }: { light: LightObject }) {
     useMemo(() => {
       const model = rawScene.clone(true);
 
-      // Each instance needs independent material state (glow colour, emission).
       model.traverse((child) => {
         const mesh = child as THREE.Mesh;
         if (!mesh.isMesh) return;
         mesh.material = Array.isArray(mesh.material)
           ? mesh.material.map((m: THREE.Material) => m.clone())
           : mesh.material.clone();
+        mesh.castShadow    = true;
+        mesh.receiveShadow = true;
       });
 
       const box  = new THREE.Box3().setFromObject(model);
       const size = box.getSize(new THREE.Vector3());
-
-      // Scale the model so its height matches targetHeight in world units.
       const scale = MOVING_HEAD_DEF.targetHeight / size.y;
 
-      // Offset applied inside the scaled group: centres the model and puts its
-      // bottom at Y=0 in local (pre-scale) space.
       const offset: [number, number, number] = [
         -(box.min.x + box.max.x) / 2,
         -box.min.y,
         -(box.min.z + box.max.z) / 2,
       ];
 
-      // Resolve model nodes named in the device definition.
       const yokeNode = MOVING_HEAD_DEF.pan
         ? (model.getObjectByName(MOVING_HEAD_DEF.pan.nodeNames[0])  ?? null)
         : null;
@@ -107,7 +73,6 @@ function MovingHeadMesh({ light }: { light: LightObject }) {
         ? (model.getObjectByName(MOVING_HEAD_DEF.tilt.nodeNames[0]) ?? null)
         : null;
 
-      // Find the lens glow material by name.
       let glowMat: THREE.MeshStandardMaterial | null = null;
       const glowName = MOVING_HEAD_DEF.beam?.glowMaterialName;
       if (glowName) {
@@ -122,7 +87,6 @@ function MovingHeadMesh({ light }: { light: LightObject }) {
         });
       }
 
-      // World-space dimensions for the selection bounding box.
       const ww = size.x * scale + SELECTION_PADDING;
       const wh = MOVING_HEAD_DEF.targetHeight + SELECTION_PADDING;
       const wd = size.z * scale + SELECTION_PADDING;
@@ -136,18 +100,21 @@ function MovingHeadMesh({ light }: { light: LightObject }) {
       };
     }, [rawScene]);
 
-  // ── Beam: world-space group tracks the Head node each frame ──────────────────
-  // The group lives outside the fixture group so it is not double-transformed.
-  const beamGroupRef = useRef<THREE.Group>(null);
+  // ── Spotlight: a group synced to the Head node carries the light ──────────────
+  // We read the head node's world position and quaternion each frame and copy
+  // them onto the group, so the spotlight always fires from the lens in the
+  // direction the head is physically pointing.
+  const spotGroupRef = useRef<THREE.Group>(null);
   const spotRef      = useRef<THREE.SpotLight>(null);
 
   useFrame(() => {
-    if (!headNode || !beamGroupRef.current) return;
-    headNode.getWorldPosition(beamGroupRef.current.position);
-    headNode.getWorldQuaternion(beamGroupRef.current.quaternion);
+    if (!headNode || !spotGroupRef.current) return;
+    headNode.getWorldPosition(spotGroupRef.current.position);
+    headNode.getWorldQuaternion(spotGroupRef.current.quaternion);
   });
 
-  // SpotLight must track its own target to fire along +Z of the beam group.
+  // Add the spotlight's target as a child at local +Z so it always points
+  // in the head node's forward (lens) direction.
   useEffect(() => {
     const spot = spotRef.current;
     if (!spot) return;
@@ -156,8 +123,8 @@ function MovingHeadMesh({ light }: { light: LightObject }) {
     return () => { spot.remove(spot.target); };
   }, []);
 
-  // ── Drive pan / tilt / glow every render ─────────────────────────────────────
-  const { pan: panDef, tilt: tiltDef, beam: beamDef } = MOVING_HEAD_DEF;
+  // ── Animate pan / tilt / glow ─────────────────────────────────────────────────
+  const { pan: panDef, tilt: tiltDef } = MOVING_HEAD_DEF;
 
   if (yokeNode && panDef) {
     yokeNode.rotation.y = (light.pan / 255 - 0.5) * panDef.totalDegrees * DEG;
@@ -171,18 +138,13 @@ function MovingHeadMesh({ light }: { light: LightObject }) {
     glowMat.emissiveIntensity = light.powered ? (light.dimmer / 255) * 4 : 0;
   }
 
-  // ── Beam geometry derived from light state ────────────────────────────────────
   const coneAngleRad = light.coneAngle * DEG;
-  const beamLength   = beamDef?.maxLength  ?? 20;
-  const lensOffset   = beamDef?.lensOffset ?? 0.06;
-  const lensRadius   = beamDef?.lensRadius ?? 0.08;
-  const farRadius    = beamLength * Math.tan(coneAngleRad);
-  const beamOpacity  = light.powered ? (light.dimmer / 255) * 0.10 : 0;
+  const lensOffset   = MOVING_HEAD_DEF.beam?.lensOffset ?? 0.06;
 
   // ── Render ────────────────────────────────────────────────────────────────────
   return (
     <>
-      {/* Fixture body: positioned at light.position in world space */}
+      {/* Fixture body */}
       <group
         position={light.position}
         rotation={[light.rotationX * DEG, light.rotationY * DEG, light.rotationZ * DEG]}
@@ -225,48 +187,28 @@ function MovingHeadMesh({ light }: { light: LightObject }) {
         )}
       </group>
 
-      {/* Beam + spotlight live in world space; useFrame tracks the Head node. */}
-      <group ref={beamGroupRef}>
-        {/*
-          Cone fires along +Z of this group (which mirrors the Head node orientation).
-          Clipping planes prevent it from penetrating the floor or back wall.
-          AlphaMap fades it out smoothly at the far end instead of cutting abruptly.
-        */}
-        <mesh
-          position={[0, 0, lensOffset + beamLength / 2]}
-          rotation={[-Math.PI / 2, 0, 0]}
-          userData={{ isBeam: true }}
-        >
-          <cylinderGeometry args={[lensRadius, farRadius, beamLength, 32, 1, true]} />
-          <meshBasicMaterial
-            color={light.color}
-            transparent
-            opacity={beamOpacity}
-            alphaMap={BEAM_FADE_TEXTURE}
-            side={THREE.DoubleSide}
-            blending={THREE.AdditiveBlending}
-            depthWrite={false}
-            clippingPlanes={BEAM_CLIP_PLANES}
-          />
-        </mesh>
-
+      {/* Spotlight group lives in world space. useFrame copies the head node's
+          world position + quaternion onto this group each frame, so the light
+          always originates from the lens and points wherever the head is aimed. */}
+      <group ref={spotGroupRef}>
         <spotLight
           ref={spotRef}
           position={[0, 0, lensOffset]}
           color={light.color}
-          intensity={light.powered ? (light.dimmer / 255) * 40 : 0}
+          intensity={light.powered ? (light.dimmer / 255) * 100 : 0}
           angle={coneAngleRad}
-          penumbra={0.15}
-          distance={beamLength}
+          penumbra={0.2}
+          distance={150}
           decay={1.5}
-          castShadow={false}
+          castShadow
+          shadow-mapSize-width={1024}
+          shadow-mapSize-height={1024}
+          shadow-bias={-0.001}
         />
       </group>
     </>
   );
 }
-
-// ── Public export: wraps in Suspense for async GLTF loading ──────────────────
 
 export function MovingHead({ light }: { light: LightObject }) {
   return (
