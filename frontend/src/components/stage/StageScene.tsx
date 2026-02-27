@@ -12,8 +12,7 @@ import {
 } from "../../materials/registry";
 import { findStageDefinition } from "../../stages/registry";
 import { StageModel } from "./StageModel";
-import { PlacedLights } from "./PlacedLights";
-import { PlacedProps } from "./PlacedProps";
+import { PlacedObjects } from "./PlacedObjects";
 import { BACKGROUND_COLOR } from "./sceneConstants";
 
 
@@ -178,8 +177,7 @@ function SceneContent() {
 
       {stageDefinition && <StageModel path={stageDefinition.path} />}
 
-      <PlacedLights />
-      <PlacedProps />
+      <PlacedObjects />
     </>
   );
 }
@@ -191,6 +189,7 @@ export function StageScene() {
   const clearSelection = useStageEditorStore((state) => state.clearSelection);
   const copySelected = useStageEditorStore((state) => state.copySelected);
   const paste = useStageEditorStore((state) => state.paste);
+  const removeObjects = useStageEditorStore((state) => state.removeObjects);
   const undo = useStageEditorStore((state) => state.undo);
   const redo = useStageEditorStore((state) => state.redo);
 
@@ -204,6 +203,13 @@ export function StageScene() {
       if (!isTextInput) {
         if (isMod && event.key === "c") copySelected();
         if (isMod && event.key === "v") paste();
+        if (event.key === "Backspace" || event.key === "Delete") {
+          const { selectedIds } = useStageEditorStore.getState();
+          if (selectedIds.length > 0) {
+            event.preventDefault();
+            removeObjects(selectedIds);
+          }
+        }
       }
 
       if (isMod && !event.shiftKey && event.key === "z") {
@@ -217,12 +223,11 @@ export function StageScene() {
     }
     window.addEventListener("keydown", handleKeyDown);
     return () => window.removeEventListener("keydown", handleKeyDown);
-  }, [copySelected, paste, undo, redo]);
+  }, [copySelected, paste, removeObjects, undo, redo]);
 
   function handleDrop(event: React.DragEvent<HTMLDivElement>) {
-    const lightType = event.dataTransfer.getData("dlc/light-type");
-    const propType  = event.dataTransfer.getData("dlc/prop-type");
-    if ((!lightType && !propType) || !cameraRef.current || !sceneRef.current) return;
+    const deviceType = event.dataTransfer.getData("dlc/device-type");
+    if (!deviceType || !cameraRef.current || !sceneRef.current) return;
 
     event.preventDefault();
 
@@ -248,8 +253,7 @@ export function StageScene() {
     if (!firstHit?.object.userData.isFloor) return;
 
     const position: [number, number, number] = [floorPoint.x, 0, floorPoint.z];
-    const type = lightType || propType;
-    addObject({ id: crypto.randomUUID(), type: type as import("../../scene/types").SceneObjectType, position });
+    addObject({ id: crypto.randomUUID(), type: deviceType as import("../../scene/types").SceneObjectType, position });
   }
 
   return (

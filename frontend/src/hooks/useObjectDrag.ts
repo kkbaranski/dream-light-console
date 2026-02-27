@@ -1,4 +1,4 @@
-import { useEffect, useRef } from "react";
+import { useEffect, useRef, useState } from "react";
 import { useThree, type ThreeEvent } from "@react-three/fiber";
 import * as THREE from "three";
 import { useStageEditorStore } from "../store/stageEditorStore";
@@ -19,7 +19,7 @@ interface DragOptions {
 // ── Position validation ───────────────────────────────────────────────────────
 
 // Walk up the ancestor chain to check if a mesh belongs to a placed scene object.
-function hasPlacedObjectAncestor(object: THREE.Object3D): boolean {
+export function hasPlacedObjectAncestor(object: THREE.Object3D): boolean {
   let node: THREE.Object3D | null = object;
   while (node) {
     if (node.userData.placedObjectId) return true;
@@ -84,6 +84,14 @@ export function useObjectDrag(
   const addToSelection = useStageEditorStore((state) => state.addToSelection);
   const toggleSelected = useStageEditorStore((state) => state.toggleSelected);
 
+  const [coordsVisible, setCoordsVisible] = useState(false);
+  const [coordsOpacity, setCoordsOpacity] = useState(1);
+  const fadeTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  useEffect(() => () => {
+    if (fadeTimerRef.current) clearTimeout(fadeTimerRef.current);
+  }, []);
+
   const capturedPointerId = useRef<number | null>(null);
   const pointerDownScreen = useRef<{ x: number; y: number } | null>(null);
   const isDragging = useRef(false);
@@ -116,6 +124,11 @@ export function useObjectDrag(
         if (dx * dx + dy * dy < DRAG_THRESHOLD_SQUARED) return;
 
         isDragging.current = true;
+
+        if (fadeTimerRef.current) clearTimeout(fadeTimerRef.current);
+        setCoordsVisible(true);
+        setCoordsOpacity(1);
+
         callbacksRef.current?.onDragStart?.();
 
         const { objects, selectedIds } = useStageEditorStore.getState();
@@ -204,6 +217,8 @@ export function useObjectDrag(
         }
       } else {
         callbacksRef.current?.onDragEnd?.();
+        setCoordsOpacity(0);
+        fadeTimerRef.current = setTimeout(() => setCoordsVisible(false), 800);
       }
 
       isDragging.current = false;
@@ -254,5 +269,5 @@ export function useObjectDrag(
     if (controls) controls.enabled = false;
   }
 
-  return { handlePointerDown };
+  return { handlePointerDown, coordsVisible, coordsOpacity };
 }

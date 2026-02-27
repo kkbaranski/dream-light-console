@@ -1,21 +1,13 @@
 import { create } from "zustand";
 import { floorMaterials, wallMaterials } from "../materials/registry";
-import {
-  type SceneObject,
-  type SceneObjectType,
-  type LightObject,
-  isLight,
-} from "../scene/types";
+import { DEVICE_REGISTRY } from "../devices/registry";
+import type { DeviceDef } from "../devices/registry";
+import type { SceneObject, SceneObjectType } from "../scene/types";
 
-export type { SceneObject, LightObject };
-export {
-  isLight,
-  isProp,
-  isTripod,
-} from "../scene/types";
+export type { SceneObject };
+export type { SceneObjectType } from "../devices/registry";
 
 // ── Patch type ─────────────────────────────────────────────────────────────────
-// Loose internal patch type; type safety is enforced at the context level.
 type LoosePatch = Partial<Record<string, unknown>>;
 
 // ── Paste offset ───────────────────────────────────────────────────────────────
@@ -34,12 +26,12 @@ function generateCopyName(originName: string, existingNames: Set<string>): strin
 function applyPatchRespectingLocks(object: SceneObject, patch: LoosePatch): SceneObject {
   const locked = object.lockedFields;
   const filtered = Object.fromEntries(
-    Object.entries(patch).filter(([key]) => !locked.includes(key) && key in object),
+    Object.entries(patch).filter(([key]) => !locked.includes(key)),
   );
-  return { ...object, ...filtered } as SceneObject;
+  return { ...(object as unknown as Record<string, unknown>), ...filtered } as unknown as SceneObject;
 }
 
-// ── Defaults per type ──────────────────────────────────────────────────────────
+// ── Object construction ────────────────────────────────────────────────────────
 
 function buildNewObject(
   id: string,
@@ -47,35 +39,16 @@ function buildNewObject(
   position: [number, number, number],
   existingObjects: SceneObject[],
 ): SceneObject {
-  if (type === "moving_head") {
-    const count = existingObjects.filter(isLight).length + 1;
-    return {
-      id,
-      type,
-      position,
-      name: `Moving Head ${count}`,
-      universe: 1,
-      startChannel: 1,
-      dimmer: 255,
-      pan: 128,
-      tilt: 128,
-      color: "#ffffff",
-      coneAngle: 15,
-      powered: true,
-      rotationX: 0,
-      rotationY: 0,
-      rotationZ: 0,
-      lockedFields: [],
-    };
+  const def = DEVICE_REGISTRY[type] as DeviceDef;
+  const defaults = { ...def.defaults };
+
+  // Auto-number the name when the device has one (e.g. "Moving Head" → "Moving Head 3").
+  if (typeof defaults.name === "string") {
+    const count = existingObjects.filter((o) => o.type === type).length + 1;
+    defaults.name = `${defaults.name} ${count}`;
   }
-  if (type === "tripod") {
-    return { id, type, position, height: 0, lockedFields: [] };
-  }
-  if (type === "tripod_with_bar") {
-    return { id, type, position, height: 0, lockedFields: [] };
-  }
-  // speaker_1 | speaker_2 | mic | barricade | disco_ball | disco_ball2
-  return { id, type, position, lockedFields: [] } as SceneObject;
+
+  return { id, type, position, lockedFields: [], ...defaults } as unknown as SceneObject;
 }
 
 // ── History snapshot ───────────────────────────────────────────────────────────
@@ -144,7 +117,7 @@ interface StageEditorStore {
   // ── Objects ────────────────────────────────────────────────────────────────
   objects: SceneObject[];
   selectedIds: string[];
-  clipboard: LightObject[] | null;
+  clipboard: SceneObject[];
   // ── History (internal) ─────────────────────────────────────────────────────
   _past: HistorySnapshot[];
   _future: HistorySnapshot[];
@@ -189,7 +162,7 @@ export const useStageEditorStore = create<StageEditorStore>((set) => ({
   // ── Objects ────────────────────────────────────────────────────────────────
   objects: [],
   selectedIds: [],
-  clipboard: null,
+  clipboard: [],
   // ── History ────────────────────────────────────────────────────────────────
   _past: [],
   _future: [],
@@ -265,32 +238,40 @@ export const useStageEditorStore = create<StageEditorStore>((set) => ({
   copySelected: () =>
     set((state) => ({
       clipboard: state.objects.filter(
-        (o) => state.selectedIds.includes(o.id) && isLight(o),
-      ) as LightObject[],
+        (o) => state.selectedIds.includes(o.id) && DEVICE_REGISTRY[o.type].supportsCopyPaste,
+      ),
     })),
   paste: () =>
     set((state) => {
-      if (!state.clipboard || state.clipboard.length === 0) return {};
-      const existingNames = new Set(
-        state.objects.filter(isLight).map((l) => (l as LightObject).name),
+      if (state.clipboard.length === 0) return {};
+
+      const existingNames = new Set<string>(
+        state.objects.flatMap((o) => {
+          const n = (o as unknown as Record<string, unknown>).name;
+          return typeof n === "string" ? [n] : [];
+        }),
       );
-      const newLights = state.clipboard.map((light) => {
-        const name = generateCopyName(light.name, existingNames);
-        existingNames.add(name);
-        return {
-          ...light,
-          id: crypto.randomUUID(),
-          name,
-          position: [
-            light.position[0] + PASTE_OFFSET[0],
-            light.position[1] + PASTE_OFFSET[1],
-            light.position[2] + PASTE_OFFSET[2],
-          ] as [number, number, number],
-        };
+
+      const newObjects: SceneObject[] = state.clipboard.map((original) => {
+        const raw = original as unknown as Record<string, unknown>;
+        const copy: Record<string, unknown> = { ...raw };
+        copy.id = crypto.randomUUID();
+        copy.position = [
+          original.position[0] + PASTE_OFFSET[0],
+          original.position[1] + PASTE_OFFSET[1],
+          original.position[2] + PASTE_OFFSET[2],
+        ];
+        if (typeof raw.name === "string") {
+          const newName = generateCopyName(raw.name, existingNames);
+          existingNames.add(newName);
+          copy.name = newName;
+        }
+        return copy as unknown as SceneObject;
       });
+
       return {
-        ...pushHistory(state, { objects: [...state.objects, ...newLights] }),
-        selectedIds: newLights.map((l) => l.id),
+        ...pushHistory(state, { objects: [...state.objects, ...newObjects] }),
+        selectedIds: newObjects.map((o) => o.id),
       };
     }),
   // ── Lock ───────────────────────────────────────────────────────────────────
@@ -300,11 +281,11 @@ export const useStageEditorStore = create<StageEditorStore>((set) => ({
         objects: state.objects.map((object) => {
           if (object.id !== id) return object;
           return {
-            ...object,
+            ...(object as unknown as Record<string, unknown>),
             lockedFields: object.lockedFields.includes(field)
               ? object.lockedFields.filter((f) => f !== field)
               : [...object.lockedFields, field],
-          };
+          } as unknown as SceneObject;
         }),
       }),
     ),
