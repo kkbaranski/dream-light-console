@@ -1,0 +1,14 @@
+[package]
+name = "dlc-engine"
+version.workspace = true
+edition.workspace = true
+
+[dependencies]
+dlc-protocol = { path = "../dlc-protocol" }
+tokio.workspace = true
+tracing.workspace = true
+thiserror.workspace = true
+
+[dev-dependencies]
+tokio = { workspace = true, features = ["test-util"] }
+mockall.workspace = true

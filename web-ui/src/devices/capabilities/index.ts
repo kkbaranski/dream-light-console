@@ -1,0 +1,25 @@
+export { name }       from "./name";
+export { dmx }        from "./dmx";
+export { dimmer }     from "./dimmer";
+export { power }      from "./power";
+export { transform }  from "./transform";
+export { rgbColor }   from "./rgbColor";
+export { colorWheel } from "./colorWheel";
+export { dualWhite }  from "./dualWhite";
+export { pan }        from "./pan";
+export { tilt }       from "./tilt";
+export { innerPole }  from "./innerPole";
+export { beam }       from "./beam";
+
+export type { NameConfig }                       from "./name";
+export type { DmxConfig }                        from "./dmx";
+export type { DimmerConfig }                     from "./dimmer";
+export type { PowerConfig }                      from "./power";
+export type { TransformConfig }                  from "./transform";
+export type { RgbColorConfig }                   from "./rgbColor";
+export type { ColorWheelConfig, ColorWheelSlot } from "./colorWheel";
+export type { DualWhiteConfig }                  from "./dualWhite";
+export type { PanConfig }                        from "./pan";
+export type { TiltConfig }                       from "./tilt";
+export type { InnerPoleConfig }                  from "./innerPole";
+export type { BeamConfig }                       from "./beam";

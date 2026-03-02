@@ -1,0 +1,2 @@
+server: cargo run -p dlc-server
+web: cd web-ui && npm run dev

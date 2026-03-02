@@ -1,0 +1,8 @@
+pub const DMX_CHANNELS_PER_UNIVERSE: usize = 512;
+pub const ENGINE_HZ: u32 = 44;
+pub const MAX_UNIVERSES: u16 = 16;
+pub const WS_HEARTBEAT_INTERVAL_SECS: u64 = 5;
+pub const WS_DEAD_CLIENT_TIMEOUT_SECS: u64 = 8;
+pub const LOCK_TIMEOUT_SECS: u64 = 30;
+pub const WS_RECONNECT_INITIAL_MS: u64 = 100;
+pub const WS_RECONNECT_MAX_MS: u64 = 5000;
