@@ -5,11 +5,13 @@ use std::time::{Duration, Instant};
 use dlc_protocol::{EngineCommand, ENGINE_HZ};
 
 use crate::error::EngineError;
+use crate::interpolation::InterpolationState;
 use crate::output::DmxOutput;
 use crate::universe::DmxUniverse;
 
 pub struct Engine {
     universes: HashMap<u16, DmxUniverse>,
+    interpolations: HashMap<u16, InterpolationState>,
     output: Box<dyn DmxOutput>,
     command_rx: mpsc::Receiver<EngineCommand>,
     tick_interval: Duration,
@@ -23,6 +25,7 @@ impl Engine {
     ) -> Self {
         Self {
             universes: HashMap::new(),
+            interpolations: HashMap::new(),
             output,
             command_rx,
             tick_interval: Duration::from_secs_f64(1.0 / ENGINE_HZ as f64),
@@ -51,12 +54,34 @@ impl Engine {
                     EngineCommand::SetUniverse { universe, data } => {
                         *self.get_or_create_universe(universe).as_mut_slice() = *data;
                     }
+                    EngineCommand::FadeChannel {
+                        universe,
+                        channel,
+                        target,
+                        frames,
+                    } => {
+                        let uni = self.universes.entry(universe).or_default();
+                        let current = uni.get(channel).unwrap_or(0);
+                        self.interpolations
+                            .entry(universe)
+                            .or_default()
+                            .start_fade(channel, current, target, frames, uni);
+                    }
                     EngineCommand::Shutdown => return,
                     _ => {} // FireCue, StopCueList, SetMasterDimmer handled in future tasks
                 }
             }
 
-            // 2. Send all active universes to output
+            // 2. Tick interpolations
+            for (&universe_id, interp) in &mut self.interpolations {
+                if interp.is_fading() {
+                    if let Some(uni) = self.universes.get_mut(&universe_id) {
+                        interp.tick(uni);
+                    }
+                }
+            }
+
+            // 3. Send all active universes to output
             for (&universe_id, universe) in &self.universes {
                 if let Err(e) = self.output.send_universe(universe_id, universe.as_slice()) {
                     tracing::warn!("Output error for universe {universe_id}: {e}");

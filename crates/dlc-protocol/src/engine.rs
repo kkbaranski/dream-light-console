@@ -18,6 +18,12 @@ pub enum EngineCommand {
     StopCueList {
         cue_list_id: u32,
     },
+    FadeChannel {
+        universe: u16,
+        channel: u16,
+        target: u8,
+        frames: u32,
+    },
     SetMasterDimmer {
         value: u8,
     },
