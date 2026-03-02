@@ -1,7 +1,9 @@
+pub mod artnet;
 mod mock;
 mod null;
 pub mod sacn;
 
+pub use artnet::ArtNetOutput;
 pub use mock::MockOutput;
 pub use null::NullOutput;
 pub use sacn::SacnOutput;
