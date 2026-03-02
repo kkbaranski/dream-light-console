@@ -34,41 +34,55 @@ impl Engine {
     }
 
     pub fn run(&mut self) {
+        let mut disconnected = false;
+
         loop {
             let tick_start = Instant::now();
 
             // 1. Drain all pending commands (non-blocking)
-            while let Ok(command) = self.command_rx.try_recv() {
-                match command {
-                    EngineCommand::SetChannel {
-                        universe,
-                        channel,
-                        value,
-                    } => {
-                        if let Err(e) =
-                            self.get_or_create_universe(universe).set(channel, value)
-                        {
-                            tracing::warn!("SetChannel error: {e}");
+            loop {
+                match self.command_rx.try_recv() {
+                    Ok(command) => match command {
+                        EngineCommand::SetChannel {
+                            universe,
+                            channel,
+                            value,
+                        } => {
+                            if let Err(e) =
+                                self.get_or_create_universe(universe).set(channel, value)
+                            {
+                                tracing::warn!("SetChannel error: {e}");
+                            }
                         }
+                        EngineCommand::SetUniverse { universe, data } => {
+                            *self.get_or_create_universe(universe).as_mut_slice() = *data;
+                        }
+                        EngineCommand::FadeChannel {
+                            universe,
+                            channel,
+                            target,
+                            frames,
+                        } => {
+                            let uni = self.universes.entry(universe).or_default();
+                            let current = uni.get(channel).unwrap_or(0);
+                            self.interpolations
+                                .entry(universe)
+                                .or_default()
+                                .start_fade(channel, current, target, frames, uni);
+                        }
+                        EngineCommand::Shutdown => return,
+                        _ => {} // FireCue, StopCueList, SetMasterDimmer handled in future tasks
+                    },
+                    Err(mpsc::TryRecvError::Empty) => break,
+                    Err(mpsc::TryRecvError::Disconnected) => {
+                        if !disconnected {
+                            tracing::warn!(
+                                "All command sources disconnected — holding last look"
+                            );
+                            disconnected = true;
+                        }
+                        break;
                     }
-                    EngineCommand::SetUniverse { universe, data } => {
-                        *self.get_or_create_universe(universe).as_mut_slice() = *data;
-                    }
-                    EngineCommand::FadeChannel {
-                        universe,
-                        channel,
-                        target,
-                        frames,
-                    } => {
-                        let uni = self.universes.entry(universe).or_default();
-                        let current = uni.get(channel).unwrap_or(0);
-                        self.interpolations
-                            .entry(universe)
-                            .or_default()
-                            .start_fade(channel, current, target, frames, uni);
-                    }
-                    EngineCommand::Shutdown => return,
-                    _ => {} // FireCue, StopCueList, SetMasterDimmer handled in future tasks
                 }
             }
 
@@ -337,5 +351,92 @@ mod tests {
     fn engine_handle_is_send_and_sync() {
         fn assert_send_sync<T: Send + Sync>() {}
         assert_send_sync::<EngineHandle>();
+    }
+
+    #[test]
+    fn hold_last_look_continues_after_sender_dropped() {
+        let (output, mock) = SharedMockOutput::new();
+        let (tx, rx) = mpsc::channel();
+
+        // Set a value then drop the sender
+        tx.send(EngineCommand::SetChannel {
+            universe: 1,
+            channel: 0,
+            value: 42,
+        })
+        .unwrap();
+        drop(tx);
+
+        // Start engine — all senders already dropped
+        let _thread = std::thread::spawn(move || {
+            let mut engine = Engine::new(Box::new(output), rx);
+            engine.run();
+        });
+
+        // Wait for several ticks (44Hz → ~150ms ≈ 6-7 frames)
+        std::thread::sleep(Duration::from_millis(150));
+
+        let mock = mock.lock().unwrap();
+        let count = mock.send_count();
+        assert!(
+            count >= 4,
+            "expected continued output in hold-last-look, got {count} frames"
+        );
+        let frame = mock.last_frame(1).expect("expected frames for universe 1");
+        assert_eq!(frame[0], 42, "channel 0 should hold its last value");
+    }
+
+    #[test]
+    fn hold_last_look_preserves_all_channels() {
+        let (output, mock) = SharedMockOutput::new();
+        let (tx, rx) = mpsc::channel();
+
+        // Set multiple channels
+        tx.send(EngineCommand::SetUniverse {
+            universe: 1,
+            data: Box::new([128; 512]),
+        })
+        .unwrap();
+        drop(tx);
+
+        let _thread = std::thread::spawn(move || {
+            let mut engine = Engine::new(Box::new(output), rx);
+            engine.run();
+        });
+
+        std::thread::sleep(Duration::from_millis(150));
+
+        let mock = mock.lock().unwrap();
+        let frame = mock.last_frame(1).expect("expected frames");
+        assert!(
+            frame.iter().all(|&v| v == 128),
+            "all channels should hold their last value"
+        );
+    }
+
+    #[test]
+    fn hold_last_look_shutdown_still_works() {
+        let (output, _mock) = SharedMockOutput::new();
+        let handle = EngineHandle::start(Box::new(output));
+
+        handle
+            .send(EngineCommand::SetChannel {
+                universe: 1,
+                channel: 0,
+                value: 100,
+            })
+            .unwrap();
+
+        std::thread::sleep(Duration::from_millis(50));
+
+        // Explicit Shutdown should still stop the engine cleanly
+        let start = Instant::now();
+        handle.shutdown().unwrap();
+        let elapsed = start.elapsed();
+
+        assert!(
+            elapsed < Duration::from_millis(100),
+            "shutdown should still work promptly: {elapsed:?}"
+        );
     }
 }
