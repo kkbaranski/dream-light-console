@@ -1,8 +1,10 @@
 mod mock;
 mod null;
+pub mod sacn;
 
 pub use mock::MockOutput;
 pub use null::NullOutput;
+pub use sacn::SacnOutput;
 
 use crate::EngineError;
 

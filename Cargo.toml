@@ -41,5 +41,8 @@ ts-rs = { version = "10", features = ["serde-json-impl"] }
 tracing = "0.1"
 tracing-subscriber = { version = "0.3", features = ["env-filter"] }
 
+# Utilities
+uuid = { version = "1", features = ["v4"] }
+
 # Testing
 mockall = "0.13"

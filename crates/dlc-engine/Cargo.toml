@@ -8,6 +8,7 @@ dlc-protocol = { path = "../dlc-protocol" }
 tokio.workspace = true
 tracing.workspace = true
 thiserror.workspace = true
+uuid.workspace = true
 
 [dev-dependencies]
 tokio = { workspace = true, features = ["test-util"] }
