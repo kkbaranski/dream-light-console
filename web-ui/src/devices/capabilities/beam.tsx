@@ -255,7 +255,6 @@ export function BeamRenderer({ obj, config, originNode, boundCaps }: BeamRendere
     attenuation:  { value: CONE_LENGTH },
     anglePower:   { value: CONE_ANGLE_POWER },
     opacity:      { value: 0.0 },
-  // eslint-disable-next-line react-hooks/exhaustive-deps
   }), []);
 
   const [bdX, bdY, bdZ] = config.beamLocalDir ?? [0, -1, 0];
@@ -267,7 +266,6 @@ export function BeamRenderer({ obj, config, originNode, boundCaps }: BeamRendere
     const q    = new THREE.Quaternion().setFromUnitVectors(from, to);
     const e    = new THREE.Euler().setFromQuaternion(q);
     return [e.x, e.y, e.z];
-  // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [bdX, bdY, bdZ]);
 
   useEffect(() => {
@@ -276,7 +274,6 @@ export function BeamRenderer({ obj, config, originNode, boundCaps }: BeamRendere
     spot.target.position.set(bdX, bdY, bdZ);
     spot.add(spot.target);
     return () => { spot.remove(spot.target); };
-  // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [bdX, bdY, bdZ]);
 
   const spotlightLocalPos = config.lensPosition ?? ([0, -(config.lensOffset ?? 0), 0] as const);

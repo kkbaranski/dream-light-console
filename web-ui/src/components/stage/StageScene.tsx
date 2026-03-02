@@ -14,6 +14,7 @@ import { findStageDefinition } from "../../stages/registry";
 import { StageModel } from "./StageModel";
 import { PlacedObjects } from "./PlacedObjects";
 import { BACKGROUND_COLOR } from "./sceneConstants";
+import { DEVICE_REGISTRY } from "../../devices/registry";
 
 
 function CameraCapture({
@@ -227,7 +228,7 @@ export function StageScene() {
 
   function handleDrop(event: React.DragEvent<HTMLDivElement>) {
     const deviceType = event.dataTransfer.getData("dlc/device-type");
-    if (!deviceType || !cameraRef.current || !sceneRef.current) return;
+    if (!deviceType || !(deviceType in DEVICE_REGISTRY) || !cameraRef.current || !sceneRef.current) return;
 
     event.preventDefault();
 

@@ -1,7 +1,6 @@
 import { LockButton, SectionDivider } from "../../components/stage/inspectorPrimitives";
 import { readField, type CapabilityDef } from "../capability";
 
-// eslint-disable-next-line @typescript-eslint/no-empty-object-type
 export interface DmxConfig {}
 
 export const dmx: CapabilityDef<DmxConfig> = {

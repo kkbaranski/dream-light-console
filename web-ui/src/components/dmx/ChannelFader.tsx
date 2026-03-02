@@ -14,7 +14,8 @@ export function ChannelFader({ channel, value }: ChannelFaderProps) {
     setChannel(channel - 1, newValue); // optimistic update
     try {
       await api.put(`/universes/1/channels/${channel}`, { value: newValue });
-    } catch {
+    } catch (error) {
+      console.warn(`Failed to update channel ${channel}:`, error);
     }
   }
 

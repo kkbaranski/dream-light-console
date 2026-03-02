@@ -233,6 +233,7 @@ export function useObjectDrag(
       canvas.removeEventListener("pointermove", onPointerMove);
       canvas.removeEventListener("pointerup", onPointerUp);
     };
+  // eslint-disable-next-line react-hooks/exhaustive-deps -- object.position changes during drag; including it would re-attach listeners mid-drag
   }, [camera, controls, gl.domElement, object.id, moveObjects, setSelected, toggleSelected]);
 
   function handlePointerDown(event: ThreeEvent<PointerEvent>) {

@@ -1,7 +1,6 @@
 import { readField, type CapabilityDef } from "../capability";
 import { PowerIcon } from "../../components/stage/inspectorPrimitives";
 
-// eslint-disable-next-line @typescript-eslint/no-empty-object-type
 export interface PowerConfig {}
 
 export const power: CapabilityDef<PowerConfig> = {

@@ -1,7 +1,6 @@
 import { SectionDivider, PositionRow } from "../../components/stage/inspectorPrimitives";
 import { readField, type CapabilityDef } from "../capability";
 
-// eslint-disable-next-line @typescript-eslint/no-empty-object-type
 export interface TransformConfig {}
 
 export const transform: CapabilityDef<TransformConfig> = {

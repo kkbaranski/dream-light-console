@@ -1,5 +1,5 @@
 import { useEffect } from "react";
-import type { HealthResponse } from "../types";
+import type { HealthResponse } from "../types/generated/HealthResponse";
 import { useDMXStore } from "../store/dmxStore";
 
 const POLL_INTERVAL_MS = 3000;
