@@ -8,4 +8,8 @@ pub enum EngineError {
     RangeOverflow { start: u16, length: usize },
     #[error("I/O error: {0}")]
     Io(#[from] std::io::Error),
+    #[error("engine command send failed: channel closed")]
+    SendFailed,
+    #[error("engine thread panicked")]
+    ThreadPanicked,
 }
