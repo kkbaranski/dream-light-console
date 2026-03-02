@@ -1,31 +1,37 @@
 use anyhow::Result;
-use axum::{routing::get, Json, Router};
-use dlc_protocol::HealthResponse;
 use tracing_subscriber::EnvFilter;
 
-const DEFAULT_PORT: u16 = 3000;
-const STATUS_OK: &str = "ok";
+mod config;
+mod routes;
+mod state;
 
-async fn health() -> Json<HealthResponse> {
-    Json(HealthResponse {
-        status: STATUS_OK.to_string(),
-        version: env!("CARGO_PKG_VERSION").to_string(),
-        engine_hz: dlc_protocol::ENGINE_HZ,
-        connected_clients: 0,
-    })
-}
+use config::ServerConfig;
+use state::AppState;
 
 #[tokio::main]
 async fn main() -> Result<()> {
     tracing_subscriber::fmt()
-        .with_env_filter(EnvFilter::from_default_env().add_directive("info".parse()?))
+        .with_env_filter(
+            EnvFilter::from_default_env()
+                .add_directive("dlc_server=info".parse()?)
+                .add_directive("tower_http=debug".parse()?),
+        )
         .init();
 
-    let app = Router::new().route("/health", get(health));
+    let config = ServerConfig::from_env();
+    let bind_addr = format!("{}:{}", config.host, config.port);
+    let static_dir = config.static_dir().to_string();
 
-    let bind_address = format!("0.0.0.0:{DEFAULT_PORT}");
-    let listener = tokio::net::TcpListener::bind(&bind_address).await?;
-    tracing::info!("DreamLightConsole server listening on port {DEFAULT_PORT}");
+    let state = AppState {
+        config: std::sync::Arc::new(config),
+    };
+
+    let app = routes::build_router(state);
+
+    tracing::info!("DreamLightConsole server listening on {bind_addr}");
+    tracing::info!("Static files: {static_dir}");
+
+    let listener = tokio::net::TcpListener::bind(&bind_addr).await?;
     axum::serve(listener, app).await?;
 
     Ok(())
