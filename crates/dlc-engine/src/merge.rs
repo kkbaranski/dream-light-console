@@ -88,6 +88,44 @@ impl OutputMerger {
         self.sources.insert(source, copy);
     }
 
+    /// Store or update a source's contribution, only bumping LTP for masked channels.
+    ///
+    /// The `mask` array indicates which channels were explicitly changed by the caller.
+    /// All 512 channel values are stored (for HTP), but only masked channels participate
+    /// in LTP sequence tracking.
+    pub fn update_source_masked(
+        &mut self,
+        source: SourceId,
+        universe: &DmxUniverse,
+        mask: &[bool; 512],
+    ) {
+        for i in 0..512u16 {
+            if !mask[i as usize] {
+                continue;
+            }
+            let new_val = universe.get(i).unwrap_or(0);
+            let should_bump = if let Some(prev) = self.sources.get(&source) {
+                prev.get(i).unwrap_or(0) != new_val
+            } else {
+                new_val != 0
+            };
+            if should_bump {
+                self.ltp_sequence += 1;
+                self.ltp_state.insert(
+                    (i, source),
+                    LtpEntry {
+                        value: new_val,
+                        sequence: self.ltp_sequence,
+                    },
+                );
+            }
+        }
+
+        let mut copy = DmxUniverse::new();
+        copy.copy_from(universe);
+        self.sources.insert(source, copy);
+    }
+
     /// Remove a source (e.g., effect stopped).
     pub fn remove_source(&mut self, source: &SourceId) {
         self.sources.remove(source);
@@ -345,5 +383,138 @@ mod tests {
         merger.update_source(src(SourceType::Submaster, 1), &sub);
 
         assert_eq!(merger.compute().get(0).unwrap(), 200);
+    }
+
+    #[test]
+    fn ltp_masked_update_only_bumps_masked_channels() {
+        let mut merger = OutputMerger::new();
+        merger.set_merge_mode(0, MergeMode::Ltp);
+        merger.set_merge_mode(1, MergeMode::Ltp);
+
+        // Source 1: set ch0=100, ch1=100
+        let mut a = DmxUniverse::new();
+        a.set(0, 100).unwrap();
+        a.set(1, 100).unwrap();
+        merger.update_source(src(SourceType::Fader, 1), &a);
+
+        // Source 2: set ch0=50, ch1=50, but only mask ch0
+        let mut b = DmxUniverse::new();
+        b.set(0, 50).unwrap();
+        b.set(1, 50).unwrap();
+        let mut mask = [false; 512];
+        mask[0] = true;
+        merger.update_source_masked(src(SourceType::Fader, 2), &b, &mask);
+
+        let out = merger.compute();
+        // ch0: LTP, fader 2 masked → 50
+        assert_eq!(out.get(0).unwrap(), 50);
+        // ch1: LTP, fader 2 NOT masked → fader 1 is latest → 100
+        assert_eq!(out.get(1).unwrap(), 100);
+    }
+
+    #[test]
+    fn ltp_masked_does_not_affect_htp_channels() {
+        let mut merger = OutputMerger::new();
+        // ch0 = HTP (default), ch1 = LTP
+        merger.set_merge_mode(1, MergeMode::Ltp);
+
+        let mut a = DmxUniverse::new();
+        a.set(0, 100).unwrap();
+        a.set(1, 100).unwrap();
+        merger.update_source(src(SourceType::Fader, 1), &a);
+
+        // Source 2: ch0=200, ch1=50, mask only ch1
+        let mut b = DmxUniverse::new();
+        b.set(0, 200).unwrap();
+        b.set(1, 50).unwrap();
+        let mut mask = [false; 512];
+        mask[1] = true;
+        merger.update_source_masked(src(SourceType::Fader, 2), &b, &mask);
+
+        let out = merger.compute();
+        // ch0: HTP, max(100, 200) = 200 (full universe stored regardless of mask)
+        assert_eq!(out.get(0).unwrap(), 200);
+        // ch1: LTP, fader 2 masked → 50
+        assert_eq!(out.get(1).unwrap(), 50);
+    }
+
+    #[test]
+    fn ltp_masked_unchanged_value_no_bump() {
+        let mut merger = OutputMerger::new();
+        merger.set_merge_mode(0, MergeMode::Ltp);
+
+        // Source 1: ch0=100
+        let mut a = DmxUniverse::new();
+        a.set(0, 100).unwrap();
+        merger.update_source(src(SourceType::Fader, 1), &a);
+
+        // Source 2: ch0=200
+        let mut b = DmxUniverse::new();
+        b.set(0, 200).unwrap();
+        merger.update_source(src(SourceType::Fader, 2), &b);
+
+        // Source 2 is latest → 200
+        assert_eq!(merger.compute().get(0).unwrap(), 200);
+
+        // Source 1 masked update with SAME value (100) → no LTP bump
+        let mask = [true; 512];
+        merger.update_source_masked(src(SourceType::Fader, 1), &a, &mask);
+
+        // Source 2 should still be latest → 200
+        assert_eq!(merger.compute().get(0).unwrap(), 200);
+    }
+
+    #[test]
+    fn ltp_multiple_masked_updates_sequence() {
+        let mut merger = OutputMerger::new();
+        merger.set_merge_mode(0, MergeMode::Ltp);
+        merger.set_merge_mode(1, MergeMode::Ltp);
+
+        // Source 1: ch0=100, ch1=100
+        let mut a = DmxUniverse::new();
+        a.set(0, 100).unwrap();
+        a.set(1, 100).unwrap();
+        merger.update_source(src(SourceType::Fader, 1), &a);
+
+        // Source 2: mask only ch0
+        let mut b = DmxUniverse::new();
+        b.set(0, 50).unwrap();
+        let mut mask0 = [false; 512];
+        mask0[0] = true;
+        merger.update_source_masked(src(SourceType::Fader, 2), &b, &mask0);
+
+        // Source 3: mask only ch1
+        let mut c = DmxUniverse::new();
+        c.set(1, 75).unwrap();
+        let mut mask1 = [false; 512];
+        mask1[1] = true;
+        merger.update_source_masked(src(SourceType::Effect, 1), &c, &mask1);
+
+        let out = merger.compute();
+        // ch0: source 2 latest → 50
+        assert_eq!(out.get(0).unwrap(), 50);
+        // ch1: source 3 latest → 75
+        assert_eq!(out.get(1).unwrap(), 75);
+    }
+
+    #[test]
+    fn ltp_remove_masked_source_falls_to_previous() {
+        let mut merger = OutputMerger::new();
+        merger.set_merge_mode(0, MergeMode::Ltp);
+
+        let mut a = DmxUniverse::new();
+        a.set(0, 100).unwrap();
+        merger.update_source(src(SourceType::Fader, 1), &a);
+
+        // Masked update from source 2
+        let mut b = DmxUniverse::new();
+        b.set(0, 200).unwrap();
+        let mask = [true; 512];
+        merger.update_source_masked(src(SourceType::Fader, 2), &b, &mask);
+
+        assert_eq!(merger.compute().get(0).unwrap(), 200);
+
+        merger.remove_source(&src(SourceType::Fader, 2));
+        assert_eq!(merger.compute().get(0).unwrap(), 100);
     }
 }
