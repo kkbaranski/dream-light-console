@@ -27,6 +27,10 @@ pub enum EngineCommand {
     SetMasterDimmer {
         value: u8,
     },
+    /// Instantly override all outputs to zero. Send again with `active: false` to release.
+    Blackout {
+        active: bool,
+    },
     Shutdown,
 }
 

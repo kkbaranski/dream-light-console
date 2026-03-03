@@ -10,6 +10,8 @@ pub enum EngineError {
     Io(#[from] std::io::Error),
     #[error("engine command send failed: channel closed")]
     SendFailed,
+    #[error("engine command channel full: backpressure applied")]
+    ChannelFull,
     #[error("engine thread panicked")]
     ThreadPanicked,
 }

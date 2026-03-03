@@ -41,82 +41,15 @@ pub async fn put(
 
 #[cfg(test)]
 mod tests {
-    use axum::{
-        body::Body,
-        http::{Method, Request, StatusCode},
-    };
-    use http_body_util::BodyExt;
-    use sqlx::sqlite::SqlitePoolOptions;
+    use axum::http::{Method, StatusCode};
     use tower::ServiceExt;
 
-    use crate::config::ServerConfig;
     use crate::routes;
-    use crate::state::AppState;
-
-    async fn test_state() -> AppState {
-        let db = SqlitePoolOptions::new()
-            .connect("sqlite::memory:")
-            .await
-            .unwrap();
-        sqlx::query("PRAGMA foreign_keys = ON")
-            .execute(&db)
-            .await
-            .unwrap();
-        sqlx::migrate!("./migrations").run(&db).await.unwrap();
-        let (engine_tx, _) = std::sync::mpsc::channel();
-        AppState {
-            config: std::sync::Arc::new(ServerConfig::from_env()),
-            db,
-            engine_tx,
-        }
-    }
-
-    fn json_request(method: Method, uri: &str, body: Option<&str>) -> Request<Body> {
-        let mut builder = Request::builder().method(method).uri(uri);
-        if body.is_some() {
-            builder = builder.header("content-type", "application/json");
-        }
-        builder
-            .body(Body::from(body.unwrap_or("").to_string()))
-            .unwrap()
-    }
-
-    async fn body_json(resp: axum::response::Response) -> serde_json::Value {
-        let bytes = resp.into_body().collect().await.unwrap().to_bytes();
-        serde_json::from_slice(&bytes).unwrap()
-    }
-
-    async fn create_show(app: &axum::Router, name: &str) -> String {
-        let resp = app
-            .clone()
-            .oneshot(json_request(
-                Method::POST,
-                "/api/shows",
-                Some(&format!(r#"{{"name":"{name}"}}"#)),
-            ))
-            .await
-            .unwrap();
-        let body = body_json(resp).await;
-        body["id"].as_str().unwrap().to_string()
-    }
-
-    async fn create_stage(app: &axum::Router, show_id: &str, name: &str) -> String {
-        let resp = app
-            .clone()
-            .oneshot(json_request(
-                Method::POST,
-                &format!("/api/shows/{show_id}/stages"),
-                Some(&format!(r#"{{"name":"{name}"}}"#)),
-            ))
-            .await
-            .unwrap();
-        let body = body_json(resp).await;
-        body["id"].as_str().unwrap().to_string()
-    }
+    use crate::test_helpers::{body_json, create_show, create_stage, json_request, spawn_test_state};
 
     #[tokio::test]
     async fn get_empty_by_default() {
-        let state = test_state().await;
+        let state = spawn_test_state().await;
         let app = routes::build_router(state);
         let show_id = create_show(&app, "Show").await;
         let stage_id = create_stage(&app, &show_id, "Stage").await;
@@ -137,7 +70,7 @@ mod tests {
 
     #[tokio::test]
     async fn put_and_get() {
-        let state = test_state().await;
+        let state = spawn_test_state().await;
         let app = routes::build_router(state);
         let show_id = create_show(&app, "Show").await;
         let stage_id = create_stage(&app, &show_id, "Stage").await;
@@ -175,7 +108,7 @@ mod tests {
 
     #[tokio::test]
     async fn put_replaces_previous() {
-        let state = test_state().await;
+        let state = spawn_test_state().await;
         let app = routes::build_router(state);
         let show_id = create_show(&app, "Show").await;
         let stage_id = create_stage(&app, &show_id, "Stage").await;
@@ -217,7 +150,7 @@ mod tests {
 
     #[tokio::test]
     async fn cascade_delete_with_stage() {
-        let state = test_state().await;
+        let state = spawn_test_state().await;
         let app = routes::build_router(state);
         let show_id = create_show(&app, "Show").await;
         let stage_id = create_stage(&app, &show_id, "Stage").await;

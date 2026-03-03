@@ -104,55 +104,16 @@ pub async fn seed_fixture_library(db: &SqlitePool) -> anyhow::Result<()> {
 
 #[cfg(test)]
 mod tests {
-    use axum::{
-        body::Body,
-        http::{Method, Request, StatusCode},
-    };
-    use http_body_util::BodyExt;
-    use sqlx::sqlite::SqlitePoolOptions;
+    use axum::http::{Method, StatusCode};
     use tower::ServiceExt;
 
-    use super::*;
-    use crate::config::ServerConfig;
+    use super::seed_fixture_library;
     use crate::routes;
-    use crate::state::AppState;
-
-    async fn test_state() -> AppState {
-        let db = SqlitePoolOptions::new()
-            .connect("sqlite::memory:")
-            .await
-            .unwrap();
-        sqlx::query("PRAGMA foreign_keys = ON")
-            .execute(&db)
-            .await
-            .unwrap();
-        sqlx::migrate!("./migrations").run(&db).await.unwrap();
-        let (engine_tx, _) = std::sync::mpsc::channel();
-        AppState {
-            config: std::sync::Arc::new(ServerConfig::from_env()),
-            db,
-            engine_tx,
-        }
-    }
-
-    fn json_request(method: Method, uri: &str, body: Option<&str>) -> Request<Body> {
-        let mut builder = Request::builder().method(method).uri(uri);
-        if body.is_some() {
-            builder = builder.header("content-type", "application/json");
-        }
-        builder
-            .body(Body::from(body.unwrap_or("").to_string()))
-            .unwrap()
-    }
-
-    async fn body_json(resp: axum::response::Response) -> serde_json::Value {
-        let bytes = resp.into_body().collect().await.unwrap().to_bytes();
-        serde_json::from_slice(&bytes).unwrap()
-    }
+    use crate::test_helpers::{body_json, json_request, spawn_test_state};
 
     #[tokio::test]
     async fn list_empty() {
-        let state = test_state().await;
+        let state = spawn_test_state().await;
         let app = routes::build_router(state);
 
         let resp = app
@@ -167,7 +128,7 @@ mod tests {
 
     #[tokio::test]
     async fn seed_populates_library() {
-        let state = test_state().await;
+        let state = spawn_test_state().await;
         seed_fixture_library(&state.db).await.unwrap();
         let app = routes::build_router(state);
 
@@ -190,7 +151,7 @@ mod tests {
 
     #[tokio::test]
     async fn create_custom_entry() {
-        let state = test_state().await;
+        let state = spawn_test_state().await;
         let app = routes::build_router(state);
 
         let resp = app
@@ -220,7 +181,7 @@ mod tests {
 
     #[tokio::test]
     async fn delete_entry() {
-        let state = test_state().await;
+        let state = spawn_test_state().await;
         seed_fixture_library(&state.db).await.unwrap();
         let app = routes::build_router(state);
 
@@ -246,7 +207,7 @@ mod tests {
 
     #[tokio::test]
     async fn delete_not_found() {
-        let state = test_state().await;
+        let state = spawn_test_state().await;
         let app = routes::build_router(state);
 
         let resp = app

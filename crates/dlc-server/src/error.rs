@@ -15,7 +15,6 @@ impl ApiError {
         Self::NotFound(msg.into())
     }
 
-    #[allow(dead_code)]
     pub fn bad_request(msg: impl Into<String>) -> Self {
         Self::BadRequest(msg.into())
     }

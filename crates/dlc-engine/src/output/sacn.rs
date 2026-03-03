@@ -132,8 +132,9 @@ impl DmxOutput for SacnOutput {
         let packet = self.build_packet(universe_id, seq, data);
         self.sequence.insert(universe_id, seq.wrapping_add(1));
 
-        let universe_byte = universe_id as u8;
-        let addr = format!("239.255.0.{universe_byte}:{SACN_PORT}");
+        let high = ((universe_id >> 8) & 0xFF) as u8;
+        let low = (universe_id & 0xFF) as u8;
+        let addr = format!("239.255.{high}.{low}:{SACN_PORT}");
         self.socket.send_to(&packet, &addr)?;
 
         Ok(())

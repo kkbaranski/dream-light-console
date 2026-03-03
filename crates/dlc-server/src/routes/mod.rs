@@ -4,9 +4,11 @@ mod dmx;
 mod health;
 pub(crate) mod library;
 mod objects;
+mod playback;
 mod presets;
 mod shows;
 mod stages;
+mod ws;
 
 use axum::{
     http::{header, Method, StatusCode},
@@ -91,7 +93,16 @@ pub fn build_router(state: AppState) -> Router {
         .route(
             "/api/universes/{universe}/channels/{channel}",
             axum::routing::put(dmx::set_channel),
-        );
+        )
+        .route(
+            "/api/cuelists/{id}/go",
+            axum::routing::post(playback::go),
+        )
+        .route(
+            "/api/cuelists/{id}/stop",
+            axum::routing::post(playback::stop),
+        )
+        .route("/ws", get(ws::upgrade));
 
     Router::new()
         .merge(api_routes)

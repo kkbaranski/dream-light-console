@@ -60,15 +60,19 @@ mod tests {
 
         let (tx, rx) = std::sync::mpsc::sync_channel(1024);
 
+        let cue_executor = crate::cue_executor::CueExecutor::new(db.clone(), tx.clone());
         let engine = dlc_engine::EngineHandle::start(
             Box::new(dlc_engine::NullOutput),
         );
 
+        let (ws_broadcast, _) = tokio::sync::broadcast::channel(256);
         let state = crate::state::AppState {
             config: std::sync::Arc::new(crate::config::ServerConfig::from_env()),
             db,
             engine_tx: tx,
             engine: std::sync::Arc::new(engine),
+            ws_broadcast,
+            cue_executor,
         };
         (state, rx)
     }

@@ -1,14 +1,18 @@
 use std::str::FromStr;
+use std::sync::Arc;
 
 use anyhow::Result;
-use dlc_engine::{EngineHandle, MockOutput, NullOutput};
+use dlc_engine::{ArtNetOutput, EngineHandle, MockOutput, NullOutput, SacnOutput};
 use sqlx::sqlite::{SqliteConnectOptions, SqlitePoolOptions};
 use tracing_subscriber::EnvFilter;
 
 mod config;
+pub(crate) mod cue_executor;
 mod error;
 mod routes;
 mod state;
+#[cfg(test)]
+pub(crate) mod test_helpers;
 
 use config::ServerConfig;
 use state::AppState;
@@ -50,6 +54,25 @@ async fn main() -> Result<()> {
 
     // Create DMX engine
     let output: Box<dyn dlc_engine::DmxOutput> = match config.dmx_output_type.as_str() {
+        "artnet" => {
+            let output = match &config.dmx_target_ip {
+                Some(ip) => {
+                    let addr: std::net::IpAddr = ip.parse()
+                        .unwrap_or_else(|_| panic!("invalid DLC_DMX_TARGET_IP: {ip}"));
+                    tracing::info!("DMX output: Art-Net unicast to {addr}");
+                    ArtNetOutput::unicast(addr)?
+                }
+                None => {
+                    tracing::info!("DMX output: Art-Net broadcast");
+                    ArtNetOutput::broadcast()?
+                }
+            };
+            Box::new(output)
+        }
+        "sacn" => {
+            tracing::info!("DMX output: sACN/E1.31 multicast (priority={})", config.sacn_priority);
+            Box::new(SacnOutput::new(config.sacn_priority)?)
+        }
         "mock" => {
             tracing::info!("DMX output: mock (no hardware)");
             Box::new(MockOutput::new())
@@ -59,19 +82,27 @@ async fn main() -> Result<()> {
             Box::new(NullOutput)
         }
         other => {
-            tracing::warn!("Unknown DMX output type '{}', using mock", other);
+            tracing::warn!("Unknown DMX output type '{other}', falling back to mock");
             Box::new(MockOutput::new())
         }
     };
 
     let engine_handle = EngineHandle::start(output);
     let engine_tx = engine_handle.sender();
+    let engine = Arc::new(engine_handle);
     tracing::info!("DMX engine started (44Hz loop)");
 
+    let (ws_broadcast, _) = tokio::sync::broadcast::channel(256);
+
+    let cue_executor = cue_executor::CueExecutor::new(db.clone(), engine_tx.clone());
+
     let state = AppState {
-        config: std::sync::Arc::new(config),
+        config: Arc::new(config),
         db,
         engine_tx,
+        engine,
+        ws_broadcast,
+        cue_executor,
     };
 
     let app = routes::build_router(state);
@@ -92,8 +123,7 @@ async fn main() -> Result<()> {
         .with_graceful_shutdown(shutdown_signal)
         .await?;
 
-    tracing::info!("Shutting down engine...");
-    engine_handle.shutdown()?;
+    // Engine shuts down via Drop when Arc<EngineHandle> refcount reaches zero
     tracing::info!("DreamLightConsole server stopped");
 
     Ok(())

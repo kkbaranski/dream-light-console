@@ -5,7 +5,11 @@ pub struct ServerConfig {
     pub static_dir: Option<String>,
     pub cors_allow_any: bool,
     pub dmx_output_type: String,
+    pub dmx_target_ip: Option<String>,
+    pub sacn_priority: u8,
 }
+
+const DEFAULT_SACN_PRIORITY: u8 = 100;
 
 impl ServerConfig {
     pub fn from_env() -> Self {
@@ -22,6 +26,11 @@ impl ServerConfig {
                 .unwrap_or(true),
             dmx_output_type: std::env::var("DLC_DMX_OUTPUT")
                 .unwrap_or_else(|_| "mock".to_string()),
+            dmx_target_ip: std::env::var("DLC_DMX_TARGET_IP").ok(),
+            sacn_priority: std::env::var("DLC_SACN_PRIORITY")
+                .ok()
+                .and_then(|v| v.parse().ok())
+                .unwrap_or(DEFAULT_SACN_PRIORITY),
         }
     }
 
