@@ -1,3 +1,5 @@
+mod cue_lists;
+mod cues;
 mod health;
 pub(crate) mod library;
 mod objects;
@@ -54,6 +56,22 @@ pub fn build_router(state: AppState) -> Router {
         .route(
             "/api/presets/{id}",
             get(presets::get).put(presets::update).delete(presets::delete),
+        )
+        .route(
+            "/api/shows/{show_id}/cuelists",
+            get(cue_lists::list).post(cue_lists::create),
+        )
+        .route(
+            "/api/cuelists/{id}",
+            axum::routing::put(cue_lists::update).delete(cue_lists::delete),
+        )
+        .route(
+            "/api/cuelists/{id}/cues",
+            get(cues::list).post(cues::create),
+        )
+        .route(
+            "/api/cues/{id}",
+            axum::routing::put(cues::update).delete(cues::delete),
         );
 
     Router::new()
