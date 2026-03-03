@@ -1,4 +1,5 @@
 mod health;
+mod shows;
 
 use axum::{
     http::StatusCode,
@@ -15,7 +16,13 @@ pub fn build_router(state: AppState) -> Router {
     let index_html =
         std::fs::read_to_string(format!("{static_dir}/index.html")).unwrap_or_default();
 
-    let api_routes = Router::new().route("/health", get(health::health));
+    let api_routes = Router::new()
+        .route("/health", get(health::health))
+        .route("/api/shows", get(shows::list).post(shows::create))
+        .route(
+            "/api/shows/{id}",
+            get(shows::get).put(shows::update).delete(shows::delete),
+        );
 
     Router::new()
         .merge(api_routes)
