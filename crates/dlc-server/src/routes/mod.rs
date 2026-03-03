@@ -1,5 +1,6 @@
 mod health;
 mod shows;
+mod stages;
 
 use axum::{
     http::StatusCode,
@@ -22,6 +23,14 @@ pub fn build_router(state: AppState) -> Router {
         .route(
             "/api/shows/{id}",
             get(shows::get).put(shows::update).delete(shows::delete),
+        )
+        .route(
+            "/api/shows/{show_id}/stages",
+            get(stages::list).post(stages::create),
+        )
+        .route(
+            "/api/stages/{id}",
+            get(stages::get).put(stages::update).delete(stages::delete),
         );
 
     Router::new()
