@@ -38,6 +38,14 @@ async fn main() -> Result<()> {
     sqlx::migrate!("./migrations").run(&db).await?;
     tracing::info!("Database ready: {}", config.db_path);
 
+    // Seed built-in fixtures on first run
+    let count: (i64,) = sqlx::query_as("SELECT COUNT(*) FROM fixture_library")
+        .fetch_one(&db)
+        .await?;
+    if count.0 == 0 {
+        routes::library::seed_fixture_library(&db).await?;
+    }
+
     let state = AppState {
         config: std::sync::Arc::new(config),
         db,

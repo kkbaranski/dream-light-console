@@ -1,4 +1,5 @@
 mod health;
+pub(crate) mod library;
 mod objects;
 mod shows;
 mod stages;
@@ -36,6 +37,14 @@ pub fn build_router(state: AppState) -> Router {
         .route(
             "/api/stages/{id}/objects",
             get(objects::get).put(objects::put),
+        )
+        .route(
+            "/api/fixtures/library",
+            get(library::list).post(library::create),
+        )
+        .route(
+            "/api/fixtures/library/{id}",
+            axum::routing::delete(library::delete),
         );
 
     Router::new()

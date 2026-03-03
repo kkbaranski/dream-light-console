@@ -1,0 +1,194 @@
+[
+  {
+    "id": "moving_head",
+    "label": "Moving Head",
+    "definition_json": {
+      "label": "Moving Head",
+      "modelPath": "/models/lights/moving_head.glb",
+      "targetHeight": 1,
+      "supportsGroupDrag": true,
+      "supportsAdditiveSelect": true,
+      "supportsCopyPaste": true,
+      "defaultMode": "sevenChannel",
+      "modes": {
+        "sevenChannel": {
+          "label": "7 Channel",
+          "name": { "defaultName": "Moving Head" },
+          "dmx": {},
+          "power": {},
+          "transform": {},
+          "dimmer": { "dmx": { "offset": 0 } },
+          "pan": { "dmx": { "offset": 1 }, "modelNode": "Yoke", "totalDegrees": 540 },
+          "tilt": { "dmx": { "offset": 2 }, "modelNode": "Head", "startDegrees": 0, "totalDegrees": 359 },
+          "rgbColor": { "dmx": { "red": 3, "green": 4, "blue": 5 }, "defaultColor": "#ffffff" },
+          "beam": { "dmx": { "offset": 6 }, "glowMaterialName": "Glow", "lensOffset": 0.06, "lensRadius": 0.08, "coneAngle": { "min": 1, "max": 60, "default": 15 }, "coneOpacity": 0.35 }
+        }
+      }
+    }
+  },
+  {
+    "id": "gobo",
+    "label": "Gobo",
+    "definition_json": {
+      "label": "Gobo",
+      "modelPath": "/models/lights/gobo.glb",
+      "targetHeight": 2,
+      "supportsGroupDrag": true,
+      "supportsAdditiveSelect": true,
+      "supportsCopyPaste": true,
+      "defaultMode": "sevenChannel",
+      "modes": {
+        "sevenChannel": {
+          "label": "7 Channel",
+          "name": { "defaultName": "Gobo" },
+          "dmx": {},
+          "power": {},
+          "transform": {},
+          "dimmer": { "dmx": { "offset": 0 } },
+          "pan": { "dmx": { "offset": 1 }, "modelNode": "Yoke", "totalDegrees": 540 },
+          "tilt": { "dmx": { "offset": 2 }, "modelNode": "Head", "startDegrees": 0, "totalDegrees": 359 },
+          "rgbColor": { "dmx": { "red": 3, "green": 4, "blue": 5 }, "defaultColor": "#ffffff" },
+          "beam": { "dmx": { "offset": 6 }, "glowMaterialName": "Glow", "lensOffset": 0.06, "lensRadius": 0.08, "coneAngle": { "min": 1, "max": 60, "default": 15 }, "coneOpacity": 0.35 }
+        }
+      }
+    }
+  },
+  {
+    "id": "fresnel",
+    "label": "Fresnel",
+    "definition_json": {
+      "label": "Fresnel",
+      "modelPath": "/models/lights/fresnel.glb",
+      "targetHeight": 1,
+      "supportsGroupDrag": true,
+      "supportsAdditiveSelect": true,
+      "supportsCopyPaste": true,
+      "defaultMode": "fourChannel",
+      "modes": {
+        "fourChannel": {
+          "label": "4 Channel",
+          "name": { "defaultName": "Fresnel" },
+          "dmx": {},
+          "power": {},
+          "transform": {},
+          "dimmer": { "dmx": { "offset": 0 } },
+          "dualWhite": { "dmx": { "warm": 1, "cold": 2 }, "warmColorHex": "#fff6e8", "coldColorHex": "#e9e8ff" },
+          "tilt": { "modelNode": "Base", "startDegrees": -60, "totalDegrees": 270 },
+          "beam": { "dmx": { "offset": 3 }, "glowMaterialName": "Bulb", "lensRadius": 0.12, "lensPosition": [0, 0, -0.7], "beamLocalDir": [0, 0, -1], "coneAngle": { "min": 5, "max": 70, "default": 25 }, "coneOpacity": 0.3 }
+        }
+      }
+    }
+  },
+  {
+    "id": "speaker_1",
+    "label": "Speaker 1",
+    "definition_json": {
+      "label": "Speaker 1",
+      "modelPath": "/models/speakers/speaker_1.glb",
+      "targetHeight": 3.0,
+      "supportsGroupDrag": false,
+      "supportsAdditiveSelect": false,
+      "supportsCopyPaste": false,
+      "defaultMode": "default",
+      "modes": { "default": { "label": "Default", "transform": {} } }
+    }
+  },
+  {
+    "id": "speaker_2",
+    "label": "Speaker 2",
+    "definition_json": {
+      "label": "Speaker 2",
+      "modelPath": "/models/speakers/speaker_2.glb",
+      "targetHeight": 2.5,
+      "supportsGroupDrag": false,
+      "supportsAdditiveSelect": false,
+      "supportsCopyPaste": false,
+      "defaultMode": "default",
+      "modes": { "default": { "label": "Default", "transform": {} } }
+    }
+  },
+  {
+    "id": "tripod",
+    "label": "Tripod",
+    "definition_json": {
+      "label": "Tripod",
+      "modelPath": "/models/stands/tripod.glb",
+      "targetHeight": 8.0,
+      "supportsGroupDrag": false,
+      "supportsAdditiveSelect": false,
+      "supportsCopyPaste": false,
+      "defaultMode": "default",
+      "modes": { "default": { "label": "Default", "innerPole": { "modelNode": "InnerPole" }, "transform": {} } }
+    }
+  },
+  {
+    "id": "tripod_with_bar",
+    "label": "Tripod w/ Bar",
+    "definition_json": {
+      "label": "Tripod w/ Bar",
+      "modelPath": "/models/stands/tripod_with_bar.glb",
+      "targetHeight": 8.0,
+      "supportsGroupDrag": false,
+      "supportsAdditiveSelect": false,
+      "supportsCopyPaste": false,
+      "defaultMode": "default",
+      "modes": { "default": { "label": "Default", "innerPole": { "modelNode": "InnerPole" }, "transform": {} } }
+    }
+  },
+  {
+    "id": "mic",
+    "label": "Microphone",
+    "definition_json": {
+      "label": "Microphone",
+      "modelPath": "/models/mic.glb",
+      "targetHeight": 3.0,
+      "supportsGroupDrag": false,
+      "supportsAdditiveSelect": false,
+      "supportsCopyPaste": false,
+      "defaultMode": "default",
+      "modes": { "default": { "label": "Default", "transform": {} } }
+    }
+  },
+  {
+    "id": "barricade",
+    "label": "Barricade",
+    "definition_json": {
+      "label": "Barricade",
+      "modelPath": "/models/barricade.glb",
+      "targetHeight": 2.5,
+      "supportsGroupDrag": false,
+      "supportsAdditiveSelect": false,
+      "supportsCopyPaste": false,
+      "defaultMode": "default",
+      "modes": { "default": { "label": "Default", "transform": {} } }
+    }
+  },
+  {
+    "id": "disco_ball",
+    "label": "Disco Ball",
+    "definition_json": {
+      "label": "Disco Ball",
+      "modelPath": "/models/other/disco_ball.glb",
+      "targetHeight": 1.5,
+      "supportsGroupDrag": false,
+      "supportsAdditiveSelect": false,
+      "supportsCopyPaste": false,
+      "defaultMode": "default",
+      "modes": { "default": { "label": "Default", "transform": {} } }
+    }
+  },
+  {
+    "id": "disco_ball2",
+    "label": "Disco Ball 2",
+    "definition_json": {
+      "label": "Disco Ball 2",
+      "modelPath": "/models/other/disco_ball2.glb",
+      "targetHeight": 1.5,
+      "supportsGroupDrag": false,
+      "supportsAdditiveSelect": false,
+      "supportsCopyPaste": false,
+      "defaultMode": "default",
+      "modes": { "default": { "label": "Default", "transform": {} } }
+    }
+  }
+]
