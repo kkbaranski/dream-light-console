@@ -4,7 +4,6 @@ pub struct ServerConfig {
     pub db_path: String,
     pub static_dir: Option<String>,
     pub cors_allow_any: bool,
-    #[allow(dead_code)] // used by future DMX output selection task
     pub dmx_output_type: String,
 }
 

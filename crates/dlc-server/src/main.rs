@@ -1,6 +1,7 @@
 use std::str::FromStr;
 
 use anyhow::Result;
+use dlc_engine::{EngineHandle, MockOutput, NullOutput};
 use sqlx::sqlite::{SqliteConnectOptions, SqlitePoolOptions};
 use tracing_subscriber::EnvFilter;
 
@@ -47,9 +48,30 @@ async fn main() -> Result<()> {
         routes::library::seed_fixture_library(&db).await?;
     }
 
+    // Create DMX engine
+    let output: Box<dyn dlc_engine::DmxOutput> = match config.dmx_output_type.as_str() {
+        "mock" => {
+            tracing::info!("DMX output: mock (no hardware)");
+            Box::new(MockOutput::new())
+        }
+        "null" => {
+            tracing::info!("DMX output: null (silent)");
+            Box::new(NullOutput)
+        }
+        other => {
+            tracing::warn!("Unknown DMX output type '{}', using mock", other);
+            Box::new(MockOutput::new())
+        }
+    };
+
+    let engine_handle = EngineHandle::start(output);
+    let engine_tx = engine_handle.sender();
+    tracing::info!("DMX engine started (44Hz loop)");
+
     let state = AppState {
         config: std::sync::Arc::new(config),
         db,
+        engine_tx,
     };
 
     let app = routes::build_router(state);
@@ -58,7 +80,21 @@ async fn main() -> Result<()> {
     tracing::info!("Static files: {static_dir}");
 
     let listener = tokio::net::TcpListener::bind(&bind_addr).await?;
-    axum::serve(listener, app).await?;
+
+    let shutdown_signal = async {
+        tokio::signal::ctrl_c()
+            .await
+            .expect("install Ctrl+C handler");
+        tracing::info!("Shutdown signal received");
+    };
+
+    axum::serve(listener, app)
+        .with_graceful_shutdown(shutdown_signal)
+        .await?;
+
+    tracing::info!("Shutting down engine...");
+    engine_handle.shutdown()?;
+    tracing::info!("DreamLightConsole server stopped");
 
     Ok(())
 }

@@ -1,5 +1,6 @@
 mod cue_lists;
 mod cues;
+mod dmx;
 mod health;
 pub(crate) mod library;
 mod objects;
@@ -86,6 +87,10 @@ pub fn build_router(state: AppState) -> Router {
         .route(
             "/api/cues/{id}",
             axum::routing::put(cues::update).delete(cues::delete),
+        )
+        .route(
+            "/api/universes/{universe}/channels/{channel}",
+            axum::routing::put(dmx::set_channel),
         );
 
     Router::new()

@@ -63,9 +63,11 @@ mod tests {
             .await
             .unwrap();
         sqlx::migrate!("./migrations").run(&db).await.unwrap();
+        let (engine_tx, _) = std::sync::mpsc::channel();
         AppState {
             config: std::sync::Arc::new(ServerConfig::from_env()),
             db,
+            engine_tx,
         }
     }
 
