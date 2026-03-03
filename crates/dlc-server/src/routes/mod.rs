@@ -8,11 +8,12 @@ mod shows;
 mod stages;
 
 use axum::{
-    http::StatusCode,
+    http::{header, Method, StatusCode},
     response::{Html, IntoResponse},
     routing::get,
     Router,
 };
+use tower_http::cors::{Any, CorsLayer};
 use tower_http::services::ServeDir;
 
 use crate::state::AppState;
@@ -21,6 +22,19 @@ pub fn build_router(state: AppState) -> Router {
     let static_dir = state.config.static_dir().to_string();
     let index_html =
         std::fs::read_to_string(format!("{static_dir}/index.html")).unwrap_or_default();
+
+    let mut cors = CorsLayer::new()
+        .allow_methods([
+            Method::GET,
+            Method::POST,
+            Method::PUT,
+            Method::DELETE,
+            Method::OPTIONS,
+        ])
+        .allow_headers([header::CONTENT_TYPE, header::AUTHORIZATION]);
+    if state.config.cors_allow_any {
+        cors = cors.allow_origin(Any);
+    }
 
     let api_routes = Router::new()
         .route("/health", get(health::health))
@@ -86,5 +100,6 @@ pub fn build_router(state: AppState) -> Router {
                 }
             }
         })))
+        .layer(cors)
         .with_state(state)
 }
