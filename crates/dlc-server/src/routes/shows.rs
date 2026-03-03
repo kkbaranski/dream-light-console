@@ -1,13 +1,13 @@
 use axum::{
     extract::{Path, State},
     http::StatusCode,
-    response::IntoResponse,
     Json,
 };
 use serde::{Deserialize, Serialize};
 use sqlx::FromRow;
 use uuid::Uuid;
 
+use crate::error::ApiError;
 use crate::state::AppState;
 
 #[derive(Debug, Serialize, Deserialize, FromRow)]
@@ -28,114 +28,83 @@ pub struct UpdateShow {
     pub name: String,
 }
 
-pub async fn list(State(state): State<AppState>) -> impl IntoResponse {
-    match sqlx::query_as::<_, Show>(
+pub async fn list(State(state): State<AppState>) -> Result<Json<Vec<Show>>, ApiError> {
+    let rows = sqlx::query_as::<_, Show>(
         "SELECT id, name, created_at, updated_at FROM shows ORDER BY created_at DESC",
     )
     .fetch_all(&state.db)
-    .await
-    {
-        Ok(rows) => Json(rows).into_response(),
-        Err(e) => {
-            tracing::error!("list shows: {e}");
-            StatusCode::INTERNAL_SERVER_ERROR.into_response()
-        }
-    }
+    .await?;
+    Ok(Json(rows))
 }
 
-pub async fn get(State(state): State<AppState>, Path(id): Path<String>) -> impl IntoResponse {
-    match sqlx::query_as::<_, Show>(
+pub async fn get(
+    State(state): State<AppState>,
+    Path(id): Path<String>,
+) -> Result<Json<Show>, ApiError> {
+    let row = sqlx::query_as::<_, Show>(
         "SELECT id, name, created_at, updated_at FROM shows WHERE id = ?",
     )
     .bind(&id)
     .fetch_optional(&state.db)
-    .await
-    {
-        Ok(Some(row)) => Json(row).into_response(),
-        Ok(None) => StatusCode::NOT_FOUND.into_response(),
-        Err(e) => {
-            tracing::error!("get show: {e}");
-            StatusCode::INTERNAL_SERVER_ERROR.into_response()
-        }
-    }
+    .await?
+    .ok_or_else(|| ApiError::not_found("show not found"))?;
+    Ok(Json(row))
 }
 
 pub async fn create(
     State(state): State<AppState>,
     Json(body): Json<CreateShow>,
-) -> impl IntoResponse {
+) -> Result<(StatusCode, Json<Show>), ApiError> {
     let id = Uuid::new_v4().to_string();
-    let result = sqlx::query("INSERT INTO shows (id, name) VALUES (?, ?)")
+    sqlx::query("INSERT INTO shows (id, name) VALUES (?, ?)")
         .bind(&id)
         .bind(&body.name)
         .execute(&state.db)
-        .await;
-
-    match result {
-        Ok(_) => {
-            let row = sqlx::query_as::<_, Show>(
-                "SELECT id, name, created_at, updated_at FROM shows WHERE id = ?",
-            )
-            .bind(&id)
-            .fetch_one(&state.db)
-            .await
-            .unwrap();
-            (StatusCode::CREATED, Json(row)).into_response()
-        }
-        Err(e) => {
-            tracing::error!("create show: {e}");
-            StatusCode::INTERNAL_SERVER_ERROR.into_response()
-        }
-    }
+        .await?;
+    let row = sqlx::query_as::<_, Show>(
+        "SELECT id, name, created_at, updated_at FROM shows WHERE id = ?",
+    )
+    .bind(&id)
+    .fetch_one(&state.db)
+    .await?;
+    Ok((StatusCode::CREATED, Json(row)))
 }
 
 pub async fn update(
     State(state): State<AppState>,
     Path(id): Path<String>,
     Json(body): Json<UpdateShow>,
-) -> impl IntoResponse {
+) -> Result<Json<Show>, ApiError> {
     let result =
         sqlx::query("UPDATE shows SET name = ?, updated_at = datetime('now') WHERE id = ?")
             .bind(&body.name)
             .bind(&id)
             .execute(&state.db)
-            .await;
-
-    match result {
-        Ok(r) if r.rows_affected() == 0 => StatusCode::NOT_FOUND.into_response(),
-        Ok(_) => {
-            let row = sqlx::query_as::<_, Show>(
-                "SELECT id, name, created_at, updated_at FROM shows WHERE id = ?",
-            )
-            .bind(&id)
-            .fetch_one(&state.db)
-            .await
-            .unwrap();
-            Json(row).into_response()
-        }
-        Err(e) => {
-            tracing::error!("update show: {e}");
-            StatusCode::INTERNAL_SERVER_ERROR.into_response()
-        }
+            .await?;
+    if result.rows_affected() == 0 {
+        return Err(ApiError::not_found("show not found"));
     }
+    let row = sqlx::query_as::<_, Show>(
+        "SELECT id, name, created_at, updated_at FROM shows WHERE id = ?",
+    )
+    .bind(&id)
+    .fetch_one(&state.db)
+    .await?;
+    Ok(Json(row))
 }
 
 pub async fn delete(
     State(state): State<AppState>,
     Path(id): Path<String>,
-) -> impl IntoResponse {
-    match sqlx::query("DELETE FROM shows WHERE id = ?")
+) -> Result<StatusCode, ApiError> {
+    let result = sqlx::query("DELETE FROM shows WHERE id = ?")
         .bind(&id)
         .execute(&state.db)
-        .await
-    {
-        Ok(r) if r.rows_affected() == 0 => StatusCode::NOT_FOUND,
-        Ok(_) => StatusCode::NO_CONTENT,
-        Err(e) => {
-            tracing::error!("delete show: {e}");
-            StatusCode::INTERNAL_SERVER_ERROR
-        }
+        .await?;
+    if result.rows_affected() == 0 {
+        return Err(ApiError::not_found("show not found"));
     }
+    Ok(StatusCode::NO_CONTENT)
 }
 
 #[cfg(test)]

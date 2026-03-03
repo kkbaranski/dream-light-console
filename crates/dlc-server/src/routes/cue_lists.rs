@@ -1,13 +1,13 @@
 use axum::{
     extract::{Path, State},
     http::StatusCode,
-    response::IntoResponse,
     Json,
 };
 use serde::{Deserialize, Serialize};
 use sqlx::FromRow;
 use uuid::Uuid;
 
+use crate::error::ApiError;
 use crate::state::AppState;
 
 #[derive(Debug, Serialize, Deserialize, FromRow)]
@@ -37,115 +37,77 @@ const SELECT: &str =
 pub async fn list(
     State(state): State<AppState>,
     Path(show_id): Path<String>,
-) -> impl IntoResponse {
-    match sqlx::query_as::<_, CueList>(&format!(
+) -> Result<Json<Vec<CueList>>, ApiError> {
+    let rows = sqlx::query_as::<_, CueList>(&format!(
         "{SELECT} WHERE show_id = ? ORDER BY sort_order, created_at"
     ))
     .bind(&show_id)
     .fetch_all(&state.db)
-    .await
-    {
-        Ok(rows) => Json(rows).into_response(),
-        Err(e) => {
-            tracing::error!("list cue_lists: {e}");
-            StatusCode::INTERNAL_SERVER_ERROR.into_response()
-        }
-    }
+    .await?;
+    Ok(Json(rows))
 }
 
 pub async fn create(
     State(state): State<AppState>,
     Path(show_id): Path<String>,
     Json(body): Json<CreateCueList>,
-) -> impl IntoResponse {
+) -> Result<(StatusCode, Json<CueList>), ApiError> {
     let id = Uuid::new_v4().to_string();
 
-    let result = sqlx::query(
-        "INSERT INTO cue_lists (id, show_id, name) VALUES (?, ?, ?)",
-    )
-    .bind(&id)
-    .bind(&show_id)
-    .bind(&body.name)
-    .execute(&state.db)
-    .await;
+    sqlx::query("INSERT INTO cue_lists (id, show_id, name) VALUES (?, ?, ?)")
+        .bind(&id)
+        .bind(&show_id)
+        .bind(&body.name)
+        .execute(&state.db)
+        .await?;
 
-    match result {
-        Ok(_) => {
-            let row = sqlx::query_as::<_, CueList>(&format!("{SELECT} WHERE id = ?"))
-                .bind(&id)
-                .fetch_one(&state.db)
-                .await
-                .unwrap();
-            (StatusCode::CREATED, Json(row)).into_response()
-        }
-        Err(e) => {
-            tracing::error!("create cue_list: {e}");
-            StatusCode::INTERNAL_SERVER_ERROR.into_response()
-        }
-    }
+    let row = sqlx::query_as::<_, CueList>(&format!("{SELECT} WHERE id = ?"))
+        .bind(&id)
+        .fetch_one(&state.db)
+        .await?;
+    Ok((StatusCode::CREATED, Json(row)))
 }
 
 pub async fn update(
     State(state): State<AppState>,
     Path(id): Path<String>,
     Json(body): Json<UpdateCueList>,
-) -> impl IntoResponse {
-    let current = match sqlx::query_as::<_, CueList>(&format!("{SELECT} WHERE id = ?"))
+) -> Result<Json<CueList>, ApiError> {
+    let current = sqlx::query_as::<_, CueList>(&format!("{SELECT} WHERE id = ?"))
         .bind(&id)
         .fetch_optional(&state.db)
-        .await
-    {
-        Ok(Some(row)) => row,
-        Ok(None) => return StatusCode::NOT_FOUND.into_response(),
-        Err(e) => {
-            tracing::error!("update cue_list (fetch): {e}");
-            return StatusCode::INTERNAL_SERVER_ERROR.into_response();
-        }
-    };
+        .await?
+        .ok_or_else(|| ApiError::not_found("cue list not found"))?;
 
     let name = body.name.unwrap_or(current.name);
     let tracking_mode = body.tracking_mode.unwrap_or(current.tracking_mode);
 
-    let result =
-        sqlx::query("UPDATE cue_lists SET name = ?, tracking_mode = ? WHERE id = ?")
-            .bind(&name)
-            .bind(&tracking_mode)
-            .bind(&id)
-            .execute(&state.db)
-            .await;
+    sqlx::query("UPDATE cue_lists SET name = ?, tracking_mode = ? WHERE id = ?")
+        .bind(&name)
+        .bind(&tracking_mode)
+        .bind(&id)
+        .execute(&state.db)
+        .await?;
 
-    match result {
-        Ok(_) => {
-            let row = sqlx::query_as::<_, CueList>(&format!("{SELECT} WHERE id = ?"))
-                .bind(&id)
-                .fetch_one(&state.db)
-                .await
-                .unwrap();
-            Json(row).into_response()
-        }
-        Err(e) => {
-            tracing::error!("update cue_list: {e}");
-            StatusCode::INTERNAL_SERVER_ERROR.into_response()
-        }
-    }
+    let row = sqlx::query_as::<_, CueList>(&format!("{SELECT} WHERE id = ?"))
+        .bind(&id)
+        .fetch_one(&state.db)
+        .await?;
+    Ok(Json(row))
 }
 
 pub async fn delete(
     State(state): State<AppState>,
     Path(id): Path<String>,
-) -> impl IntoResponse {
-    match sqlx::query("DELETE FROM cue_lists WHERE id = ?")
+) -> Result<StatusCode, ApiError> {
+    let result = sqlx::query("DELETE FROM cue_lists WHERE id = ?")
         .bind(&id)
         .execute(&state.db)
-        .await
-    {
-        Ok(r) if r.rows_affected() == 0 => StatusCode::NOT_FOUND,
-        Ok(_) => StatusCode::NO_CONTENT,
-        Err(e) => {
-            tracing::error!("delete cue_list: {e}");
-            StatusCode::INTERNAL_SERVER_ERROR
-        }
+        .await?;
+    if result.rows_affected() == 0 {
+        return Err(ApiError::not_found("cue list not found"));
     }
+    Ok(StatusCode::NO_CONTENT)
 }
 
 #[cfg(test)]

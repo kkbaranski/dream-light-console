@@ -1,13 +1,13 @@
 use axum::{
     extract::{Path, State},
     http::StatusCode,
-    response::IntoResponse,
     Json,
 };
 use serde::{Deserialize, Serialize};
 use sqlx::FromRow;
 use uuid::Uuid;
 
+use crate::error::ApiError;
 use crate::state::AppState;
 
 #[derive(Debug, Serialize, Deserialize, FromRow)]
@@ -63,42 +63,34 @@ const SELECT: &str = "SELECT id, show_id, name, floor_material_id, wall_material
 pub async fn list(
     State(state): State<AppState>,
     Path(show_id): Path<String>,
-) -> impl IntoResponse {
-    match sqlx::query_as::<_, Stage>(&format!("{SELECT} WHERE show_id = ? ORDER BY created_at"))
-        .bind(&show_id)
-        .fetch_all(&state.db)
-        .await
-    {
-        Ok(rows) => Json(rows).into_response(),
-        Err(e) => {
-            tracing::error!("list stages: {e}");
-            StatusCode::INTERNAL_SERVER_ERROR.into_response()
-        }
-    }
+) -> Result<Json<Vec<Stage>>, ApiError> {
+    let rows =
+        sqlx::query_as::<_, Stage>(&format!("{SELECT} WHERE show_id = ? ORDER BY created_at"))
+            .bind(&show_id)
+            .fetch_all(&state.db)
+            .await?;
+    Ok(Json(rows))
 }
 
-pub async fn get(State(state): State<AppState>, Path(id): Path<String>) -> impl IntoResponse {
-    match sqlx::query_as::<_, Stage>(&format!("{SELECT} WHERE id = ?"))
+pub async fn get(
+    State(state): State<AppState>,
+    Path(id): Path<String>,
+) -> Result<Json<Stage>, ApiError> {
+    let row = sqlx::query_as::<_, Stage>(&format!("{SELECT} WHERE id = ?"))
         .bind(&id)
         .fetch_optional(&state.db)
-        .await
-    {
-        Ok(Some(row)) => Json(row).into_response(),
-        Ok(None) => StatusCode::NOT_FOUND.into_response(),
-        Err(e) => {
-            tracing::error!("get stage: {e}");
-            StatusCode::INTERNAL_SERVER_ERROR.into_response()
-        }
-    }
+        .await?
+        .ok_or_else(|| ApiError::not_found("stage not found"))?;
+    Ok(Json(row))
 }
 
 pub async fn create(
     State(state): State<AppState>,
     Path(show_id): Path<String>,
     Json(body): Json<CreateStage>,
-) -> impl IntoResponse {
+) -> Result<(StatusCode, Json<Stage>), ApiError> {
     let id = Uuid::new_v4().to_string();
-    let result = sqlx::query(
+    sqlx::query(
         "INSERT INTO stages (id, show_id, name, floor_material_id, wall_material_id, floor_tile_size, wall_tile_size, stage_model_id) VALUES (?, ?, ?, ?, ?, ?, ?, ?)",
     )
     .bind(&id)
@@ -110,41 +102,25 @@ pub async fn create(
     .bind(body.wall_tile_size)
     .bind(&body.stage_model_id)
     .execute(&state.db)
-    .await;
+    .await?;
 
-    match result {
-        Ok(_) => {
-            let row = sqlx::query_as::<_, Stage>(&format!("{SELECT} WHERE id = ?"))
-                .bind(&id)
-                .fetch_one(&state.db)
-                .await
-                .unwrap();
-            (StatusCode::CREATED, Json(row)).into_response()
-        }
-        Err(e) => {
-            tracing::error!("create stage: {e}");
-            StatusCode::INTERNAL_SERVER_ERROR.into_response()
-        }
-    }
+    let row = sqlx::query_as::<_, Stage>(&format!("{SELECT} WHERE id = ?"))
+        .bind(&id)
+        .fetch_one(&state.db)
+        .await?;
+    Ok((StatusCode::CREATED, Json(row)))
 }
 
 pub async fn update(
     State(state): State<AppState>,
     Path(id): Path<String>,
     Json(body): Json<UpdateStage>,
-) -> impl IntoResponse {
-    let current = match sqlx::query_as::<_, Stage>(&format!("{SELECT} WHERE id = ?"))
+) -> Result<Json<Stage>, ApiError> {
+    let current = sqlx::query_as::<_, Stage>(&format!("{SELECT} WHERE id = ?"))
         .bind(&id)
         .fetch_optional(&state.db)
-        .await
-    {
-        Ok(Some(row)) => row,
-        Ok(None) => return StatusCode::NOT_FOUND.into_response(),
-        Err(e) => {
-            tracing::error!("update stage (fetch): {e}");
-            return StatusCode::INTERNAL_SERVER_ERROR.into_response();
-        }
-    };
+        .await?
+        .ok_or_else(|| ApiError::not_found("stage not found"))?;
 
     let name = body.name.unwrap_or(current.name);
     let floor_mat = body.floor_material_id.unwrap_or(current.floor_material_id);
@@ -156,7 +132,7 @@ pub async fn update(
         None => current.stage_model_id,
     };
 
-    let result = sqlx::query(
+    sqlx::query(
         "UPDATE stages SET name = ?, floor_material_id = ?, wall_material_id = ?, floor_tile_size = ?, wall_tile_size = ?, stage_model_id = ?, updated_at = datetime('now') WHERE id = ?",
     )
     .bind(&name)
@@ -167,40 +143,27 @@ pub async fn update(
     .bind(&stage_model)
     .bind(&id)
     .execute(&state.db)
-    .await;
+    .await?;
 
-    match result {
-        Ok(_) => {
-            let row = sqlx::query_as::<_, Stage>(&format!("{SELECT} WHERE id = ?"))
-                .bind(&id)
-                .fetch_one(&state.db)
-                .await
-                .unwrap();
-            Json(row).into_response()
-        }
-        Err(e) => {
-            tracing::error!("update stage: {e}");
-            StatusCode::INTERNAL_SERVER_ERROR.into_response()
-        }
-    }
+    let row = sqlx::query_as::<_, Stage>(&format!("{SELECT} WHERE id = ?"))
+        .bind(&id)
+        .fetch_one(&state.db)
+        .await?;
+    Ok(Json(row))
 }
 
 pub async fn delete(
     State(state): State<AppState>,
     Path(id): Path<String>,
-) -> impl IntoResponse {
-    match sqlx::query("DELETE FROM stages WHERE id = ?")
+) -> Result<StatusCode, ApiError> {
+    let result = sqlx::query("DELETE FROM stages WHERE id = ?")
         .bind(&id)
         .execute(&state.db)
-        .await
-    {
-        Ok(r) if r.rows_affected() == 0 => StatusCode::NOT_FOUND,
-        Ok(_) => StatusCode::NO_CONTENT,
-        Err(e) => {
-            tracing::error!("delete stage: {e}");
-            StatusCode::INTERNAL_SERVER_ERROR
-        }
+        .await?;
+    if result.rows_affected() == 0 {
+        return Err(ApiError::not_found("stage not found"));
     }
+    Ok(StatusCode::NO_CONTENT)
 }
 
 #[cfg(test)]

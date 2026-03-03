@@ -1,12 +1,12 @@
 use axum::{
     extract::{Path, State},
     http::StatusCode,
-    response::IntoResponse,
     Json,
 };
 use serde::{Deserialize, Serialize};
 use sqlx::{FromRow, SqlitePool};
 
+use crate::error::ApiError;
 use crate::state::AppState;
 
 #[derive(Debug, Serialize, Deserialize, FromRow)]
@@ -28,67 +28,49 @@ pub struct CreateEntry {
 const SELECT: &str =
     "SELECT id, label, source, definition_json, created_at FROM fixture_library";
 
-pub async fn list(State(state): State<AppState>) -> impl IntoResponse {
-    match sqlx::query_as::<_, LibraryEntry>(&format!("{SELECT} ORDER BY created_at"))
+pub async fn list(
+    State(state): State<AppState>,
+) -> Result<Json<Vec<LibraryEntry>>, ApiError> {
+    let rows = sqlx::query_as::<_, LibraryEntry>(&format!("{SELECT} ORDER BY created_at"))
         .fetch_all(&state.db)
-        .await
-    {
-        Ok(rows) => Json(rows).into_response(),
-        Err(e) => {
-            tracing::error!("list library: {e}");
-            StatusCode::INTERNAL_SERVER_ERROR.into_response()
-        }
-    }
+        .await?;
+    Ok(Json(rows))
 }
 
 pub async fn create(
     State(state): State<AppState>,
     Json(body): Json<CreateEntry>,
-) -> impl IntoResponse {
+) -> Result<(StatusCode, Json<LibraryEntry>), ApiError> {
     let json_str = serde_json::to_string(&body.definition_json).unwrap();
 
-    let result = sqlx::query(
+    sqlx::query(
         "INSERT INTO fixture_library (id, label, source, definition_json) VALUES (?, ?, 'custom', ?)",
     )
     .bind(&body.id)
     .bind(&body.label)
     .bind(&json_str)
     .execute(&state.db)
-    .await;
+    .await?;
 
-    match result {
-        Ok(_) => {
-            let row =
-                sqlx::query_as::<_, LibraryEntry>(&format!("{SELECT} WHERE id = ?"))
-                    .bind(&body.id)
-                    .fetch_one(&state.db)
-                    .await
-                    .unwrap();
-            (StatusCode::CREATED, Json(row)).into_response()
-        }
-        Err(e) => {
-            tracing::error!("create library entry: {e}");
-            StatusCode::INTERNAL_SERVER_ERROR.into_response()
-        }
-    }
+    let row = sqlx::query_as::<_, LibraryEntry>(&format!("{SELECT} WHERE id = ?"))
+        .bind(&body.id)
+        .fetch_one(&state.db)
+        .await?;
+    Ok((StatusCode::CREATED, Json(row)))
 }
 
 pub async fn delete(
     State(state): State<AppState>,
     Path(id): Path<String>,
-) -> impl IntoResponse {
-    match sqlx::query("DELETE FROM fixture_library WHERE id = ?")
+) -> Result<StatusCode, ApiError> {
+    let result = sqlx::query("DELETE FROM fixture_library WHERE id = ?")
         .bind(&id)
         .execute(&state.db)
-        .await
-    {
-        Ok(r) if r.rows_affected() == 0 => StatusCode::NOT_FOUND,
-        Ok(_) => StatusCode::NO_CONTENT,
-        Err(e) => {
-            tracing::error!("delete library entry: {e}");
-            StatusCode::INTERNAL_SERVER_ERROR
-        }
+        .await?;
+    if result.rows_affected() == 0 {
+        return Err(ApiError::not_found("library entry not found"));
     }
+    Ok(StatusCode::NO_CONTENT)
 }
 
 // ── Seed logic ───────────────────────────────────────────────────────────────

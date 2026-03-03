@@ -1,56 +1,42 @@
 use axum::{
     extract::{Path, State},
-    http::StatusCode,
-    response::IntoResponse,
     Json,
 };
 
+use crate::error::ApiError;
 use crate::state::AppState;
 
 pub async fn get(
     State(state): State<AppState>,
     Path(stage_id): Path<String>,
-) -> impl IntoResponse {
-    let row = sqlx::query_scalar::<_, String>(
+) -> Result<String, ApiError> {
+    let json = sqlx::query_scalar::<_, String>(
         "SELECT objects_json FROM stage_objects WHERE stage_id = ?",
     )
     .bind(&stage_id)
     .fetch_optional(&state.db)
-    .await;
-
-    match row {
-        Ok(Some(json)) => json.into_response(),
-        Ok(None) => "[]".into_response(),
-        Err(e) => {
-            tracing::error!("get objects: {e}");
-            StatusCode::INTERNAL_SERVER_ERROR.into_response()
-        }
-    }
+    .await?
+    .unwrap_or_else(|| "[]".to_string());
+    Ok(json)
 }
 
 pub async fn put(
     State(state): State<AppState>,
     Path(stage_id): Path<String>,
     Json(body): Json<serde_json::Value>,
-) -> impl IntoResponse {
+) -> Result<Json<serde_json::Value>, ApiError> {
     let json_str = serde_json::to_string(&body).unwrap();
 
-    let result = sqlx::query(
+    sqlx::query(
         "INSERT INTO stage_objects (stage_id, objects_json, updated_at) VALUES (?, ?, datetime('now')) \
          ON CONFLICT(stage_id) DO UPDATE SET objects_json = excluded.objects_json, updated_at = excluded.updated_at",
     )
     .bind(&stage_id)
     .bind(&json_str)
     .execute(&state.db)
-    .await;
+    .await?;
 
-    match result {
-        Ok(_) => Json(serde_json::json!({ "saved": true })).into_response(),
-        Err(e) => {
-            tracing::error!("put objects: {e}");
-            StatusCode::INTERNAL_SERVER_ERROR.into_response()
-        }
-    }
+    Ok(Json(serde_json::json!({ "saved": true })))
 }
 
 #[cfg(test)]

@@ -1,13 +1,13 @@
 use axum::{
     extract::{Path, Query, State},
     http::StatusCode,
-    response::IntoResponse,
     Json,
 };
 use serde::{Deserialize, Serialize};
 use sqlx::FromRow;
 use uuid::Uuid;
 
+use crate::error::ApiError;
 use crate::state::AppState;
 
 #[derive(Debug, Serialize, Deserialize, FromRow)]
@@ -47,45 +47,36 @@ const SELECT: &str = "SELECT id, show_id, name, fixture_type, mode, values_json,
 pub async fn list(
     State(state): State<AppState>,
     Query(query): Query<ListQuery>,
-) -> impl IntoResponse {
-    match sqlx::query_as::<_, Preset>(&format!(
+) -> Result<Json<Vec<Preset>>, ApiError> {
+    let rows = sqlx::query_as::<_, Preset>(&format!(
         "{SELECT} WHERE show_id = ? ORDER BY created_at"
     ))
     .bind(&query.show_id)
     .fetch_all(&state.db)
-    .await
-    {
-        Ok(rows) => Json(rows).into_response(),
-        Err(e) => {
-            tracing::error!("list presets: {e}");
-            StatusCode::INTERNAL_SERVER_ERROR.into_response()
-        }
-    }
+    .await?;
+    Ok(Json(rows))
 }
 
-pub async fn get(State(state): State<AppState>, Path(id): Path<String>) -> impl IntoResponse {
-    match sqlx::query_as::<_, Preset>(&format!("{SELECT} WHERE id = ?"))
+pub async fn get(
+    State(state): State<AppState>,
+    Path(id): Path<String>,
+) -> Result<Json<Preset>, ApiError> {
+    let row = sqlx::query_as::<_, Preset>(&format!("{SELECT} WHERE id = ?"))
         .bind(&id)
         .fetch_optional(&state.db)
-        .await
-    {
-        Ok(Some(row)) => Json(row).into_response(),
-        Ok(None) => StatusCode::NOT_FOUND.into_response(),
-        Err(e) => {
-            tracing::error!("get preset: {e}");
-            StatusCode::INTERNAL_SERVER_ERROR.into_response()
-        }
-    }
+        .await?
+        .ok_or_else(|| ApiError::not_found("preset not found"))?;
+    Ok(Json(row))
 }
 
 pub async fn create(
     State(state): State<AppState>,
     Json(body): Json<CreatePreset>,
-) -> impl IntoResponse {
+) -> Result<(StatusCode, Json<Preset>), ApiError> {
     let id = Uuid::new_v4().to_string();
     let values_str = serde_json::to_string(&body.values).unwrap();
 
-    let result = sqlx::query(
+    sqlx::query(
         "INSERT INTO presets (id, show_id, name, fixture_type, mode, values_json) VALUES (?, ?, ?, ?, ?, ?)",
     )
     .bind(&id)
@@ -95,41 +86,25 @@ pub async fn create(
     .bind(&body.mode)
     .bind(&values_str)
     .execute(&state.db)
-    .await;
+    .await?;
 
-    match result {
-        Ok(_) => {
-            let row = sqlx::query_as::<_, Preset>(&format!("{SELECT} WHERE id = ?"))
-                .bind(&id)
-                .fetch_one(&state.db)
-                .await
-                .unwrap();
-            (StatusCode::CREATED, Json(row)).into_response()
-        }
-        Err(e) => {
-            tracing::error!("create preset: {e}");
-            StatusCode::INTERNAL_SERVER_ERROR.into_response()
-        }
-    }
+    let row = sqlx::query_as::<_, Preset>(&format!("{SELECT} WHERE id = ?"))
+        .bind(&id)
+        .fetch_one(&state.db)
+        .await?;
+    Ok((StatusCode::CREATED, Json(row)))
 }
 
 pub async fn update(
     State(state): State<AppState>,
     Path(id): Path<String>,
     Json(body): Json<UpdatePreset>,
-) -> impl IntoResponse {
-    let current = match sqlx::query_as::<_, Preset>(&format!("{SELECT} WHERE id = ?"))
+) -> Result<Json<Preset>, ApiError> {
+    let current = sqlx::query_as::<_, Preset>(&format!("{SELECT} WHERE id = ?"))
         .bind(&id)
         .fetch_optional(&state.db)
-        .await
-    {
-        Ok(Some(row)) => row,
-        Ok(None) => return StatusCode::NOT_FOUND.into_response(),
-        Err(e) => {
-            tracing::error!("update preset (fetch): {e}");
-            return StatusCode::INTERNAL_SERVER_ERROR.into_response();
-        }
-    };
+        .await?
+        .ok_or_else(|| ApiError::not_found("preset not found"))?;
 
     let name = body.name.unwrap_or(current.name);
     let values_str = match body.values {
@@ -137,47 +112,34 @@ pub async fn update(
         None => current.values_json,
     };
 
-    let result = sqlx::query(
+    sqlx::query(
         "UPDATE presets SET name = ?, values_json = ?, updated_at = datetime('now') WHERE id = ?",
     )
     .bind(&name)
     .bind(&values_str)
     .bind(&id)
     .execute(&state.db)
-    .await;
+    .await?;
 
-    match result {
-        Ok(_) => {
-            let row = sqlx::query_as::<_, Preset>(&format!("{SELECT} WHERE id = ?"))
-                .bind(&id)
-                .fetch_one(&state.db)
-                .await
-                .unwrap();
-            Json(row).into_response()
-        }
-        Err(e) => {
-            tracing::error!("update preset: {e}");
-            StatusCode::INTERNAL_SERVER_ERROR.into_response()
-        }
-    }
+    let row = sqlx::query_as::<_, Preset>(&format!("{SELECT} WHERE id = ?"))
+        .bind(&id)
+        .fetch_one(&state.db)
+        .await?;
+    Ok(Json(row))
 }
 
 pub async fn delete(
     State(state): State<AppState>,
     Path(id): Path<String>,
-) -> impl IntoResponse {
-    match sqlx::query("DELETE FROM presets WHERE id = ?")
+) -> Result<StatusCode, ApiError> {
+    let result = sqlx::query("DELETE FROM presets WHERE id = ?")
         .bind(&id)
         .execute(&state.db)
-        .await
-    {
-        Ok(r) if r.rows_affected() == 0 => StatusCode::NOT_FOUND,
-        Ok(_) => StatusCode::NO_CONTENT,
-        Err(e) => {
-            tracing::error!("delete preset: {e}");
-            StatusCode::INTERNAL_SERVER_ERROR
-        }
+        .await?;
+    if result.rows_affected() == 0 {
+        return Err(ApiError::not_found("preset not found"));
     }
+    Ok(StatusCode::NO_CONTENT)
 }
 
 #[cfg(test)]
