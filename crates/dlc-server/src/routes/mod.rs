@@ -1,4 +1,5 @@
 mod health;
+mod objects;
 mod shows;
 mod stages;
 
@@ -31,6 +32,10 @@ pub fn build_router(state: AppState) -> Router {
         .route(
             "/api/stages/{id}",
             get(stages::get).put(stages::update).delete(stages::delete),
+        )
+        .route(
+            "/api/stages/{id}/objects",
+            get(objects::get).put(objects::put),
         );
 
     Router::new()
