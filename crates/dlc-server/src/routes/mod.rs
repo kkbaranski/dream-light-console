@@ -1,6 +1,7 @@
 mod health;
 pub(crate) mod library;
 mod objects;
+mod presets;
 mod shows;
 mod stages;
 
@@ -45,6 +46,14 @@ pub fn build_router(state: AppState) -> Router {
         .route(
             "/api/fixtures/library/{id}",
             axum::routing::delete(library::delete),
+        )
+        .route(
+            "/api/presets",
+            get(presets::list).post(presets::create),
+        )
+        .route(
+            "/api/presets/{id}",
+            get(presets::get).put(presets::update).delete(presets::delete),
         );
 
     Router::new()
