@@ -25,7 +25,7 @@ pub async fn set_channel(
 
     state
         .engine_tx
-        .send(EngineCommand::SetChannel {
+        .try_send(EngineCommand::SetChannel {
             universe,
             channel,
             value: body.value,
@@ -38,18 +38,16 @@ pub async fn set_channel(
 #[cfg(test)]
 mod tests {
     use axum::{
-        body::Body,
-        http::{Method, Request, StatusCode},
+        http::{Method, StatusCode},
     };
     use http_body_util::BodyExt;
     use sqlx::sqlite::SqlitePoolOptions;
     use tower::ServiceExt;
 
-    use crate::config::ServerConfig;
     use crate::routes;
-    use crate::state::AppState;
+    use crate::test_helpers::json_request;
 
-    async fn test_state() -> (AppState, std::sync::mpsc::Receiver<dlc_protocol::EngineCommand>) {
+    async fn test_state_with_receiver() -> (crate::state::AppState, std::sync::mpsc::Receiver<dlc_protocol::EngineCommand>) {
         let db = SqlitePoolOptions::new()
             .connect("sqlite::memory:")
             .await
@@ -60,29 +58,24 @@ mod tests {
             .unwrap();
         sqlx::migrate!("./migrations").run(&db).await.unwrap();
 
-        let (tx, rx) = std::sync::mpsc::channel();
+        let (tx, rx) = std::sync::mpsc::sync_channel(1024);
 
-        let state = AppState {
-            config: std::sync::Arc::new(ServerConfig::from_env()),
+        let engine = dlc_engine::EngineHandle::start(
+            Box::new(dlc_engine::NullOutput),
+        );
+
+        let state = crate::state::AppState {
+            config: std::sync::Arc::new(crate::config::ServerConfig::from_env()),
             db,
             engine_tx: tx,
+            engine: std::sync::Arc::new(engine),
         };
         (state, rx)
     }
 
-    fn json_request(method: Method, uri: &str, body: Option<&str>) -> Request<Body> {
-        let mut builder = Request::builder().method(method).uri(uri);
-        if body.is_some() {
-            builder = builder.header("content-type", "application/json");
-        }
-        builder
-            .body(Body::from(body.unwrap_or("").to_string()))
-            .unwrap()
-    }
-
     #[tokio::test]
     async fn set_channel_sends_command() {
-        let (state, rx) = test_state().await;
+        let (state, rx) = test_state_with_receiver().await;
         let app = routes::build_router(state);
 
         let resp = app
@@ -113,7 +106,7 @@ mod tests {
 
     #[tokio::test]
     async fn set_channel_invalid_channel() {
-        let (state, _rx) = test_state().await;
+        let (state, _rx) = test_state_with_receiver().await;
         let app = routes::build_router(state);
 
         let resp = app
@@ -130,7 +123,7 @@ mod tests {
 
     #[tokio::test]
     async fn set_channel_missing_value() {
-        let (state, _rx) = test_state().await;
+        let (state, _rx) = test_state_with_receiver().await;
         let app = routes::build_router(state);
 
         let resp = app
@@ -148,7 +141,7 @@ mod tests {
 
     #[tokio::test]
     async fn set_channel_response_body() {
-        let (state, _rx) = test_state().await;
+        let (state, _rx) = test_state_with_receiver().await;
         let app = routes::build_router(state);
 
         let resp = app
