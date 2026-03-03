@@ -1,6 +1,9 @@
 # Rust
 target/
 *.db
+*.db-shm
+*.db-wal
+*.db-journal
 
 # Node
 node_modules/
