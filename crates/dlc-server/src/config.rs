@@ -1,9 +1,9 @@
-#[allow(dead_code)] // fields used by future tasks (DB, DMX output selection)
 pub struct ServerConfig {
     pub port: u16,
     pub host: String,
     pub db_path: String,
     pub static_dir: Option<String>,
+    #[allow(dead_code)] // used by future DMX output selection task
     pub dmx_output_type: String,
 }
 

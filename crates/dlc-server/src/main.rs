@@ -1,4 +1,7 @@
+use std::str::FromStr;
+
 use anyhow::Result;
+use sqlx::sqlite::{SqliteConnectOptions, SqlitePoolOptions};
 use tracing_subscriber::EnvFilter;
 
 mod config;
@@ -22,8 +25,22 @@ async fn main() -> Result<()> {
     let bind_addr = format!("{}:{}", config.host, config.port);
     let static_dir = config.static_dir().to_string();
 
+    // Connect to SQLite with foreign keys enabled on every connection
+    let db_url = format!("sqlite:{}?mode=rwc", config.db_path);
+    let options = SqliteConnectOptions::from_str(&db_url)?
+        .pragma("foreign_keys", "ON")
+        .create_if_missing(true);
+    let db = SqlitePoolOptions::new()
+        .max_connections(5)
+        .connect_with(options)
+        .await?;
+
+    sqlx::migrate!("./migrations").run(&db).await?;
+    tracing::info!("Database ready: {}", config.db_path);
+
     let state = AppState {
         config: std::sync::Arc::new(config),
+        db,
     };
 
     let app = routes::build_router(state);
