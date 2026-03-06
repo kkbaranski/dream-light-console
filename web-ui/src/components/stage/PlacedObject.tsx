@@ -1,26 +1,25 @@
-import { Suspense, useMemo } from "react";
+import { Suspense, useEffect, useMemo } from "react";
 import { useGLTF, Html } from "@react-three/drei";
 import { useFrame } from "@react-three/fiber";
 import * as THREE from "three";
 import { useStageEditorStore } from "../../store/stageEditorStore";
 import type { SceneObject } from "../../scene/types";
 import { useObjectDrag } from "../../hooks/useObjectDrag";
-import { DEVICE_REGISTRY, activeCapabilities } from "../../devices/registry";
-import type { BoundCapability } from "../../devices/capability";
-import type { BeamConfig } from "../../devices/capabilities/beam";
-import { BeamRenderer, findBeamOriginNode } from "../../devices/capabilities/beam";
+import { DEVICE_REGISTRY, activeFeatures } from "../../devices/registry";
+import { DEG2RAD, type BoundFeature } from "../../devices/feature";
+import type { BeamConfig } from "../../devices/features/beam/beam";
+import { BeamRenderer, findBeamOriginNode } from "../../devices/features/beam/beam";
 
 for (const def of Object.values(DEVICE_REGISTRY)) {
   useGLTF.preload(def.modelPath);
 }
 
-const DEGREES_PER_RADIAN = Math.PI / 180;
-const SELECTION_PADDING  = 0.1;
+const SELECTION_PADDING = 0.1;
 
 function PlacedObjectMesh({ object }: { object: SceneObject }) {
   const def        = DEVICE_REGISTRY[object.type];
   const isSelected = useStageEditorStore((state) => state.selectedIds.includes(object.id));
-  const caps       = activeCapabilities(def, object.mode);
+  const features   = activeFeatures(def, object.mode);
 
   const { handlePointerDown, coordsVisible, coordsOpacity } = useObjectDrag(
     object,
@@ -57,20 +56,22 @@ function PlacedObjectMesh({ object }: { object: SceneObject }) {
         -(box.min.z + box.max.z) / 2,
       ];
 
-      const beamOriginNode = findBeamOriginNode(model, caps);
+      const beamOriginNode = findBeamOriginNode(model, features);
 
-      const ww = size.x * scale + SELECTION_PADDING;
-      const wh = def.targetHeight    + SELECTION_PADDING;
-      const wd = size.z * scale + SELECTION_PADDING;
-      const selectionEdges = new THREE.EdgesGeometry(new THREE.BoxGeometry(ww, wh, wd));
-      const overlayPos: [number, number, number] = [ww / 2 + 0.05, wh, wd / 2 + 0.05];
+      const selectionWidth  = size.x * scale + SELECTION_PADDING;
+      const selectionHeight = def.targetHeight    + SELECTION_PADDING;
+      const selectionDepth  = size.z * scale + SELECTION_PADDING;
+      const selectionEdges = new THREE.EdgesGeometry(new THREE.BoxGeometry(selectionWidth, selectionHeight, selectionDepth));
+      const overlayPos: [number, number, number] = [selectionWidth / 2 + 0.05, selectionHeight, selectionDepth / 2 + 0.05];
 
       return { model, scale, offset, beamOriginNode, selectionEdges, overlayPos };
-    }, [rawScene, def, caps]);
+    }, [rawScene, def, features]);
+
+  useEffect(() => () => { selectionEdges.dispose(); }, [selectionEdges]);
 
   useFrame(() => {
-    for (const { cap, config } of caps) {
-      cap.applyToModel?.(model, object, config, caps);
+    for (const { feature, config } of features) {
+      feature.applyToModel?.(model, object, config, features);
     }
   });
 
@@ -79,15 +80,15 @@ function PlacedObjectMesh({ object }: { object: SceneObject }) {
   const rotationY = typeof raw.rotationY === "number" ? raw.rotationY : 0;
   const rotationZ = typeof raw.rotationZ === "number" ? raw.rotationZ : 0;
 
-  const beamBound = caps.find((b): b is BoundCapability & { config: BeamConfig } =>
-    b.cap.type === "beam",
+  const beamBound = features.find((b): b is BoundFeature & { config: BeamConfig } =>
+    b.feature.type === "beam",
   );
 
   return (
     <>
       <group
         position={object.position}
-        rotation={[rotationX * DEGREES_PER_RADIAN, rotationY * DEGREES_PER_RADIAN, rotationZ * DEGREES_PER_RADIAN]}
+        rotation={[rotationX * DEG2RAD, rotationY * DEG2RAD, rotationZ * DEG2RAD]}
         userData={{ placedObjectId: object.id }}
         onPointerDown={handlePointerDown}
       >
@@ -132,7 +133,7 @@ function PlacedObjectMesh({ object }: { object: SceneObject }) {
           obj={object}
           config={beamBound.config}
           originNode={beamOriginNode}
-          boundCaps={caps}
+          boundFeatures={features}
         />
       )}
     </>

@@ -1,0 +1,19 @@
+{
+  "id": "tripod_with_bar",
+  "label": "Tripod w/ Bar",
+  "modelPath": "/models/stands/tripod_with_bar.glb",
+  "targetHeight": 8.0,
+  "supportsGroupDrag": false,
+  "supportsAdditiveSelect": false,
+  "supportsCopyPaste": false,
+  "defaultMode": "default",
+  "modes": {
+    "default": {
+      "label": "Default",
+      "innerPole": {
+        "modelNode": "InnerPole"
+      },
+      "transform": {}
+    }
+  }
+}

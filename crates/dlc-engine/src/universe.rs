@@ -33,15 +33,15 @@ impl DmxUniverse {
     }
 
     pub fn set_range(&mut self, start: u16, values: &[u8]) -> Result<(), EngineError> {
-        let s = start as usize;
-        let end = s + values.len();
+        let start_index = start as usize;
+        let end = start_index + values.len();
         if end > CH_COUNT {
             return Err(EngineError::RangeOverflow {
                 start,
                 length: values.len(),
             });
         }
-        self.channels[s..end].copy_from_slice(values);
+        self.channels[start_index..end].copy_from_slice(values);
         Ok(())
     }
 

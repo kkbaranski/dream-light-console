@@ -11,43 +11,45 @@ use serde_json::Value;
 use sqlx::SqlitePool;
 use tokio::sync::Mutex;
 
+use crate::fixture_types::FixtureTypeDef;
+
+/// A fixture state entry within a cue's scene_json.
+/// The scene_json contains all data needed to resolve DMX channels without
+/// additional DB lookups.
 #[derive(Debug, Deserialize)]
-struct PresetRef {
-    preset_id: String,
+struct FixtureState {
+    fixture_type_id: String,
+    dmx_mode: String,
+    universe: u16,
+    dmx_address: u16,
     #[serde(default)]
-    targets: Vec<DmxTarget>,
+    values: serde_json::Map<String, Value>,
 }
 
+/// The scene_json structure stored in cues.
 #[derive(Debug, Deserialize)]
-struct DmxTarget {
-    universe: u16,
-    start_channel: u16,
+struct SceneData {
+    #[serde(default)]
+    fixtures: Vec<FixtureState>,
 }
 
 #[derive(Debug, sqlx::FromRow)]
 struct CueRow {
     id: String,
     cue_list_id: String,
-    cue_number: f64,
-    fade_up_ms: i64,
-    fade_down_ms: i64,
-    follow_ms: Option<i64>,
-    preset_refs_json: String,
-}
-
-#[derive(Debug, sqlx::FromRow)]
-struct PresetRow {
-    fixture_type: String,
-    mode: String,
-    values_json: String,
+    number: f64,
+    fade_time_ms: i64,
+    auto_follow: bool,
+    post_wait_ms: i64,
+    scene_json: String,
 }
 
 #[derive(Debug)]
 pub enum CueError {
     CueNotFound(String),
-    PresetNotFound(String),
     FixtureNotFound(String),
     NoCuesInList,
+    EndOfList,
     Database(sqlx::Error),
     InvalidJson(serde_json::Error),
 }
@@ -56,9 +58,9 @@ impl std::fmt::Display for CueError {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self {
             Self::CueNotFound(id) => write!(f, "cue not found: {id}"),
-            Self::PresetNotFound(id) => write!(f, "preset not found: {id}"),
-            Self::FixtureNotFound(id) => write!(f, "fixture not found: {id}"),
+            Self::FixtureNotFound(id) => write!(f, "fixture type not found: {id}"),
             Self::NoCuesInList => write!(f, "no cues in list"),
+            Self::EndOfList => write!(f, "end of cue list"),
             Self::Database(e) => write!(f, "database error: {e}"),
             Self::InvalidJson(e) => write!(f, "json parse error: {e}"),
         }
@@ -86,6 +88,9 @@ struct ResolvedChannel {
 struct ActiveCueList {
     current_cue_id: String,
     stop_signal: Arc<tokio::sync::Notify>,
+    /// Last resolved channel values for fade direction comparison.
+    /// Key: (universe, channel), Value: target DMX value from previous cue.
+    last_values: HashMap<(u16, u16), u8>,
 }
 
 #[derive(Clone)]
@@ -93,14 +98,20 @@ pub struct CueExecutor {
     db: SqlitePool,
     engine_tx: mpsc::SyncSender<EngineCommand>,
     active_lists: Arc<Mutex<HashMap<String, ActiveCueList>>>,
+    fixture_types: Arc<HashMap<String, FixtureTypeDef>>,
 }
 
 impl CueExecutor {
-    pub fn new(db: SqlitePool, engine_tx: mpsc::SyncSender<EngineCommand>) -> Self {
+    pub fn new(
+        db: SqlitePool,
+        engine_tx: mpsc::SyncSender<EngineCommand>,
+        fixture_types: Arc<HashMap<String, FixtureTypeDef>>,
+    ) -> Self {
         Self {
             db,
             engine_tx,
             active_lists: Arc::new(Mutex::new(HashMap::new())),
+            fixture_types,
         }
     }
 
@@ -110,7 +121,7 @@ impl CueExecutor {
             match active.get(cue_list_id) {
                 Some(entry) => {
                     let cue = self.load_cue(&entry.current_cue_id).await?;
-                    Some(cue.cue_number)
+                    Some(cue.number)
                 }
                 None => None,
             }
@@ -127,6 +138,7 @@ impl CueExecutor {
                 self.execute_cue(cue).await?;
                 Ok(cue_id)
             }
+            None if current_number.is_some() => Err(CueError::EndOfList),
             None => Err(CueError::NoCuesInList),
         }
     }
@@ -158,18 +170,31 @@ impl CueExecutor {
                 }
             }
 
-            let channels = self.resolve_cue_channels(&cue).await?;
+            let channels = self.resolve_cue_channels(&cue)?;
 
-            let fade_up_frames = ms_to_frames(cue.fade_up_ms);
-            let fade_down_frames = ms_to_frames(cue.fade_down_ms);
-            let fade_frames = fade_up_frames.max(fade_down_frames);
+            let fade_frames = ms_to_frames(cue.fade_time_ms);
+
+            // Read previous channel values for fade direction comparison.
+            let prev_values = {
+                let active = self.active_lists.lock().await;
+                active
+                    .get(&cue_list_id)
+                    .map(|entry| entry.last_values.clone())
+                    .unwrap_or_default()
+            };
 
             for ch in &channels {
+                let prev = prev_values.get(&(ch.universe, ch.channel)).copied().unwrap_or(0);
+                let frames = if ch.target == prev {
+                    0
+                } else {
+                    fade_frames
+                };
                 let _ = self.engine_tx.try_send(EngineCommand::FadeChannel {
                     universe: ch.universe,
                     channel: ch.channel,
                     target: ch.target,
-                    frames: fade_frames,
+                    frames,
                 });
             }
 
@@ -182,12 +207,12 @@ impl CueExecutor {
 
             let stop_signal = Arc::new(tokio::sync::Notify::new());
 
-            if let Some(follow_ms) = cue.follow_ms {
-                let max_fade_ms = cue.fade_up_ms.max(cue.fade_down_ms);
-                let total_delay = Duration::from_millis((max_fade_ms + follow_ms) as u64);
+            if cue.auto_follow {
+                let total_delay_ms = cue.fade_time_ms + cue.post_wait_ms;
+                let total_delay = Duration::from_millis(total_delay_ms as u64);
                 let executor = self.clone();
                 let list_id = cue_list_id.clone();
-                let cue_number = cue.cue_number;
+                let cue_number = cue.number;
                 let signal = stop_signal.clone();
 
                 tokio::spawn(async move {
@@ -206,12 +231,22 @@ impl CueExecutor {
                 });
             }
 
+            let new_values: HashMap<(u16, u16), u8> = channels
+                .iter()
+                .map(|ch| ((ch.universe, ch.channel), ch.target))
+                .collect();
+
             let mut active = self.active_lists.lock().await;
+            // Merge: start from previous values, overlay with new cue's values.
+            let mut merged = prev_values;
+            merged.extend(&new_values);
+
             active.insert(
                 cue_list_id,
                 ActiveCueList {
                     current_cue_id: cue_id,
                     stop_signal,
+                    last_values: merged,
                 },
             );
 
@@ -221,7 +256,7 @@ impl CueExecutor {
 
     async fn load_cue(&self, cue_id: &str) -> Result<CueRow, CueError> {
         sqlx::query_as::<_, CueRow>(
-            "SELECT id, cue_list_id, cue_number, fade_up_ms, fade_down_ms, follow_ms, preset_refs_json FROM cues WHERE id = ?",
+            "SELECT id, cue_list_id, number, fade_time_ms, auto_follow, post_wait_ms, scene_json FROM cues WHERE id = ?",
         )
         .bind(cue_id)
         .fetch_optional(&self.db)
@@ -231,7 +266,7 @@ impl CueExecutor {
 
     async fn find_first_cue(&self, cue_list_id: &str) -> Result<Option<CueRow>, CueError> {
         Ok(sqlx::query_as::<_, CueRow>(
-            "SELECT id, cue_list_id, cue_number, fade_up_ms, fade_down_ms, follow_ms, preset_refs_json FROM cues WHERE cue_list_id = ? ORDER BY cue_number ASC LIMIT 1",
+            "SELECT id, cue_list_id, number, fade_time_ms, auto_follow, post_wait_ms, scene_json FROM cues WHERE cue_list_id = ? ORDER BY number ASC LIMIT 1",
         )
         .bind(cue_list_id)
         .fetch_optional(&self.db)
@@ -244,7 +279,7 @@ impl CueExecutor {
         after_number: f64,
     ) -> Result<Option<CueRow>, CueError> {
         Ok(sqlx::query_as::<_, CueRow>(
-            "SELECT id, cue_list_id, cue_number, fade_up_ms, fade_down_ms, follow_ms, preset_refs_json FROM cues WHERE cue_list_id = ? AND cue_number > ? ORDER BY cue_number ASC LIMIT 1",
+            "SELECT id, cue_list_id, number, fade_time_ms, auto_follow, post_wait_ms, scene_json FROM cues WHERE cue_list_id = ? AND number > ? ORDER BY number ASC LIMIT 1",
         )
         .bind(cue_list_id)
         .bind(after_number)
@@ -252,51 +287,39 @@ impl CueExecutor {
         .await?)
     }
 
-    async fn load_preset(&self, preset_id: &str) -> Result<PresetRow, CueError> {
-        sqlx::query_as::<_, PresetRow>(
-            "SELECT fixture_type, mode, values_json FROM presets WHERE id = ?",
-        )
-        .bind(preset_id)
-        .fetch_optional(&self.db)
-        .await?
-        .ok_or_else(|| CueError::PresetNotFound(preset_id.to_string()))
-    }
-
-    async fn load_fixture_definition(&self, fixture_type: &str) -> Result<Value, CueError> {
-        let json_str: String = sqlx::query_scalar(
-            "SELECT definition_json FROM fixture_library WHERE id = ?",
-        )
-        .bind(fixture_type)
-        .fetch_optional(&self.db)
-        .await?
-        .ok_or_else(|| CueError::FixtureNotFound(fixture_type.to_string()))?;
-
-        Ok(serde_json::from_str(&json_str)?)
-    }
-
-    async fn resolve_cue_channels(&self, cue: &CueRow) -> Result<Vec<ResolvedChannel>, CueError> {
-        let preset_refs: Vec<PresetRef> = serde_json::from_str(&cue.preset_refs_json)?;
+    /// Resolve a cue's scene_json into DMX channel targets.
+    /// Scene JSON contains fixture states with denormalized fixture type info.
+    fn resolve_cue_channels(&self, cue: &CueRow) -> Result<Vec<ResolvedChannel>, CueError> {
+        let scene: SceneData = serde_json::from_str(&cue.scene_json)?;
         let mut channels = Vec::new();
 
-        for preset_ref in &preset_refs {
-            let preset = self.load_preset(&preset_ref.preset_id).await?;
-            let definition = self.load_fixture_definition(&preset.fixture_type).await?;
-            let values: serde_json::Map<String, Value> =
-                serde_json::from_str(&preset.values_json)?;
+        for fixture_state in &scene.fixtures {
+            let definition = self
+                .fixture_types
+                .get(&fixture_state.fixture_type_id)
+                .map(|ft| &ft.definition)
+                .ok_or_else(|| {
+                    CueError::FixtureNotFound(fixture_state.fixture_type_id.clone())
+                })?;
 
             let mode_config = definition
                 .get("modes")
-                .and_then(|m| m.get(&preset.mode))
+                .and_then(|m| m.get(&fixture_state.dmx_mode))
                 .ok_or_else(|| {
-                    CueError::FixtureNotFound(format!("{}:{}", preset.fixture_type, preset.mode))
+                    CueError::FixtureNotFound(format!(
+                        "{}:{}",
+                        fixture_state.fixture_type_id, fixture_state.dmx_mode
+                    ))
                 })?;
 
-            for target in &preset_ref.targets {
-                let base = target.start_channel.saturating_sub(1);
-                let resolved =
-                    resolve_mode_channels(mode_config, &values, target.universe, base);
-                channels.extend(resolved);
-            }
+            let base = fixture_state.dmx_address.saturating_sub(1);
+            let resolved = resolve_mode_channels(
+                mode_config,
+                &fixture_state.values,
+                fixture_state.universe,
+                base,
+            );
+            channels.extend(resolved);
         }
 
         Ok(channels)
@@ -315,31 +338,31 @@ fn resolve_mode_channels(
     };
 
     let mut channels = Vec::new();
-    for (cap_name, cap_config) in mode_obj {
-        let resolved = resolve_capability(cap_name, cap_config, values, universe, base_channel);
+    for (feature_name, feature_config) in mode_obj {
+        let resolved = resolve_feature(feature_name, feature_config, values, universe, base_channel);
         channels.extend(resolved);
     }
     channels
 }
 
-fn resolve_capability(
-    cap_name: &str,
-    cap_config: &Value,
+fn resolve_feature(
+    feature_name: &str,
+    feature_config: &Value,
     values: &serde_json::Map<String, Value>,
     universe: u16,
     base: u16,
 ) -> Vec<ResolvedChannel> {
-    let dmx_config = match cap_config.get("dmx") {
+    let dmx_config = match feature_config.get("dmx") {
         Some(d) if d.is_object() && !d.as_object().unwrap().is_empty() => d,
         _ => return vec![],
     };
 
-    match cap_name {
+    match feature_name {
         "dimmer" | "pan" | "tilt" | "colorWheel" => {
-            let field = if cap_name == "colorWheel" {
+            let field = if feature_name == "colorWheel" {
                 "colorWheelIndex"
             } else {
-                cap_name
+                feature_name
             };
             resolve_linear8(dmx_config, field, values, universe, base)
         }
@@ -378,15 +401,15 @@ fn resolve_rgb(
     universe: u16,
     base: u16,
 ) -> Vec<ResolvedChannel> {
-    let r_off = dmx_config
+    let red_offset = dmx_config
         .get("red")
         .and_then(|v| v.as_u64())
         .unwrap_or(0) as u16;
-    let g_off = dmx_config
+    let green_offset = dmx_config
         .get("green")
         .and_then(|v| v.as_u64())
         .unwrap_or(0) as u16;
-    let b_off = dmx_config
+    let blue_offset = dmx_config
         .get("blue")
         .and_then(|v| v.as_u64())
         .unwrap_or(0) as u16;
@@ -398,17 +421,17 @@ fn resolve_rgb(
     vec![
         ResolvedChannel {
             universe,
-            channel: base + r_off,
+            channel: base + red_offset,
             target: r,
         },
         ResolvedChannel {
             universe,
-            channel: base + g_off,
+            channel: base + green_offset,
             target: g,
         },
         ResolvedChannel {
             universe,
-            channel: base + b_off,
+            channel: base + blue_offset,
             target: b,
         },
     ]
@@ -420,11 +443,11 @@ fn resolve_dual_white(
     universe: u16,
     base: u16,
 ) -> Vec<ResolvedChannel> {
-    let warm_off = dmx_config
+    let warm_offset = dmx_config
         .get("warm")
         .and_then(|v| v.as_u64())
         .unwrap_or(0) as u16;
-    let cold_off = dmx_config
+    let cold_offset = dmx_config
         .get("cold")
         .and_then(|v| v.as_u64())
         .unwrap_or(0) as u16;
@@ -439,12 +462,12 @@ fn resolve_dual_white(
     vec![
         ResolvedChannel {
             universe,
-            channel: base + warm_off,
+            channel: base + warm_offset,
             target: warm,
         },
         ResolvedChannel {
             universe,
-            channel: base + cold_off,
+            channel: base + cold_offset,
             target: cold,
         },
     ]
@@ -624,5 +647,216 @@ mod tests {
 
         let channels = resolve_mode_channels(&mode, &values, 3, 0);
         assert!(channels.iter().all(|c| c.universe == 3));
+    }
+
+    // ── Integration tests for scene_json-based resolution ────────────────────
+
+    async fn setup_executor_with_db() -> (CueExecutor, SqlitePool, mpsc::Receiver<EngineCommand>) {
+        use sqlx::sqlite::SqlitePoolOptions;
+
+        let db = SqlitePoolOptions::new()
+            .connect("sqlite::memory:")
+            .await
+            .unwrap();
+        sqlx::query("PRAGMA foreign_keys = ON")
+            .execute(&db)
+            .await
+            .unwrap();
+        sqlx::migrate!("./migrations").run(&db).await.unwrap();
+
+        let fixture_types = Arc::new(crate::fixture_types::load_embedded());
+        let (engine_tx, engine_rx) = mpsc::sync_channel(1024);
+        let executor = CueExecutor::new(db.clone(), engine_tx, fixture_types);
+        (executor, db, engine_rx)
+    }
+
+    /// Seed the DB with a stage, concert, cue list, and cues using scene_json.
+    /// Returns (cue_list_id, cue1_id, cue2_id).
+    async fn seed_fade_test_data(
+        db: &SqlitePool,
+        cue1_fade_ms: i64,
+        cue2_fade_ms: i64,
+    ) -> (String, String, String) {
+        // Create stage
+        let stage_id = uuid::Uuid::new_v4().to_string();
+        sqlx::query("INSERT INTO stages (id, name) VALUES (?, 'Test Stage')")
+            .bind(&stage_id)
+            .execute(db)
+            .await
+            .unwrap();
+
+        // Create concert
+        let concert_id = uuid::Uuid::new_v4().to_string();
+        sqlx::query("INSERT INTO concerts (id, name, stage_id) VALUES (?, 'Test Concert', ?)")
+            .bind(&concert_id)
+            .bind(&stage_id)
+            .execute(db)
+            .await
+            .unwrap();
+
+        // Cue list
+        let cue_list_id = uuid::Uuid::new_v4().to_string();
+        sqlx::query("INSERT INTO cue_lists (id, concert_id, name) VALUES (?, ?, 'Test List')")
+            .bind(&cue_list_id)
+            .bind(&concert_id)
+            .execute(db)
+            .await
+            .unwrap();
+
+        // Cue 1: dimmer at 200
+        let cue1_id = uuid::Uuid::new_v4().to_string();
+        let scene1 = serde_json::json!({
+            "fixtures": [{
+                "fixture_type_id": "moving_head",
+                "dmx_mode": "sevenChannel",
+                "universe": 1,
+                "dmx_address": 1,
+                "values": {"dimmer": 200}
+            }]
+        });
+        sqlx::query("INSERT INTO cues (id, cue_list_id, number, fade_time_ms, scene_json) VALUES (?, ?, 1.0, ?, ?)")
+            .bind(&cue1_id)
+            .bind(&cue_list_id)
+            .bind(cue1_fade_ms)
+            .bind(scene1.to_string())
+            .execute(db)
+            .await
+            .unwrap();
+
+        // Cue 2: dimmer at 50
+        let cue2_id = uuid::Uuid::new_v4().to_string();
+        let scene2 = serde_json::json!({
+            "fixtures": [{
+                "fixture_type_id": "moving_head",
+                "dmx_mode": "sevenChannel",
+                "universe": 1,
+                "dmx_address": 1,
+                "values": {"dimmer": 50}
+            }]
+        });
+        sqlx::query("INSERT INTO cues (id, cue_list_id, number, fade_time_ms, scene_json) VALUES (?, ?, 2.0, ?, ?)")
+            .bind(&cue2_id)
+            .bind(&cue_list_id)
+            .bind(cue2_fade_ms)
+            .bind(scene2.to_string())
+            .execute(db)
+            .await
+            .unwrap();
+
+        (cue_list_id, cue1_id, cue2_id)
+    }
+
+    fn drain_fade_commands(rx: &mpsc::Receiver<EngineCommand>) -> Vec<(u16, u16, u8, u32)> {
+        let mut commands = Vec::new();
+        while let Ok(cmd) = rx.try_recv() {
+            if let EngineCommand::FadeChannel { universe, channel, target, frames } = cmd {
+                commands.push((universe, channel, target, frames));
+            }
+        }
+        commands
+    }
+
+    #[tokio::test]
+    async fn first_cue_uses_fade_for_changing_channels() {
+        let (executor, db, rx) = setup_executor_with_db().await;
+        let (cue_list_id, _, _) = seed_fade_test_data(&db, 3000, 1000).await;
+
+        // Fire cue 1 (from zero → 200 = changing)
+        executor.go(&cue_list_id).await.unwrap();
+
+        let cmds = drain_fade_commands(&rx);
+        assert!(!cmds.is_empty(), "expected FadeChannel commands");
+
+        let fade_frames = ms_to_frames(3000);
+        for &(_, _, target, frames) in &cmds {
+            if target > 0 {
+                assert_eq!(frames, fade_frames, "channel changing should use fade_frames");
+            }
+        }
+    }
+
+    #[tokio::test]
+    async fn second_cue_uses_fade_for_decreasing_channels() {
+        let (executor, db, rx) = setup_executor_with_db().await;
+        let (cue_list_id, _, _) = seed_fade_test_data(&db, 1000, 5000).await;
+
+        // Fire cue 1 (0 → 200)
+        executor.go(&cue_list_id).await.unwrap();
+        drain_fade_commands(&rx);
+
+        // Fire cue 2 (200 → 50 = decrease)
+        executor.go(&cue_list_id).await.unwrap();
+
+        let cmds = drain_fade_commands(&rx);
+        assert!(!cmds.is_empty(), "expected FadeChannel commands");
+
+        let fade_frames = ms_to_frames(5000);
+        let dimmer_cmd = cmds.iter().find(|&&(_, ch, _, _)| ch == 0).unwrap();
+        assert_eq!(dimmer_cmd.3, fade_frames, "dimmer going down should use fade_frames");
+    }
+
+    #[tokio::test]
+    async fn equal_value_uses_zero_frames() {
+        let (executor, db, rx) = setup_executor_with_db().await;
+
+        // Create stage + concert + cue list
+        let stage_id = uuid::Uuid::new_v4().to_string();
+        sqlx::query("INSERT INTO stages (id, name) VALUES (?, 'Stage')")
+            .bind(&stage_id)
+            .execute(&db)
+            .await
+            .unwrap();
+        let concert_id = uuid::Uuid::new_v4().to_string();
+        sqlx::query("INSERT INTO concerts (id, name, stage_id) VALUES (?, 'Concert', ?)")
+            .bind(&concert_id)
+            .bind(&stage_id)
+            .execute(&db)
+            .await
+            .unwrap();
+        let cue_list_id = uuid::Uuid::new_v4().to_string();
+        sqlx::query("INSERT INTO cue_lists (id, concert_id, name) VALUES (?, ?, 'List')")
+            .bind(&cue_list_id)
+            .bind(&concert_id)
+            .execute(&db)
+            .await
+            .unwrap();
+
+        let scene = serde_json::json!({
+            "fixtures": [{
+                "fixture_type_id": "moving_head",
+                "dmx_mode": "sevenChannel",
+                "universe": 1,
+                "dmx_address": 1,
+                "values": {"dimmer": 128}
+            }]
+        });
+
+        // Two cues with same scene but different fade times
+        sqlx::query("INSERT INTO cues (id, cue_list_id, number, fade_time_ms, scene_json) VALUES (?, ?, 1.0, 1000, ?)")
+            .bind(uuid::Uuid::new_v4().to_string())
+            .bind(&cue_list_id)
+            .bind(scene.to_string())
+            .execute(&db)
+            .await
+            .unwrap();
+
+        sqlx::query("INSERT INTO cues (id, cue_list_id, number, fade_time_ms, scene_json) VALUES (?, ?, 2.0, 5000, ?)")
+            .bind(uuid::Uuid::new_v4().to_string())
+            .bind(&cue_list_id)
+            .bind(scene.to_string())
+            .execute(&db)
+            .await
+            .unwrap();
+
+        // Fire cue 1 (0 → 128)
+        executor.go(&cue_list_id).await.unwrap();
+        drain_fade_commands(&rx);
+
+        // Fire cue 2 (128 → 128, equal = instant, 0 frames)
+        executor.go(&cue_list_id).await.unwrap();
+        let cmds = drain_fade_commands(&rx);
+
+        let dimmer_cmd = cmds.iter().find(|&&(_, ch, _, _)| ch == 0).unwrap();
+        assert_eq!(dimmer_cmd.3, 0, "equal value should use 0 frames (instant set)");
     }
 }

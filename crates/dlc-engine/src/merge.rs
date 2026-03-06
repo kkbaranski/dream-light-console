@@ -192,9 +192,9 @@ impl Default for OutputMerger {
 mod tests {
     use super::*;
 
-    fn src(st: SourceType, id: u32) -> SourceId {
+    fn make_source(source_type: SourceType, id: u32) -> SourceId {
         SourceId {
-            source_type: st,
+            source_type,
             id,
         }
     }
@@ -205,11 +205,11 @@ mod tests {
 
         let mut a = DmxUniverse::new();
         a.set(0, 100).unwrap();
-        merger.update_source(src(SourceType::Fader, 1), &a);
+        merger.update_source(make_source(SourceType::Fader, 1), &a);
 
         let mut b = DmxUniverse::new();
         b.set(0, 200).unwrap();
-        merger.update_source(src(SourceType::Fader, 2), &b);
+        merger.update_source(make_source(SourceType::Fader, 2), &b);
 
         let out = merger.compute();
         assert_eq!(out.get(0).unwrap(), 200);
@@ -221,13 +221,13 @@ mod tests {
 
         let mut a = DmxUniverse::new();
         a.set(0, 100).unwrap();
-        merger.update_source(src(SourceType::Fader, 1), &a);
+        merger.update_source(make_source(SourceType::Fader, 1), &a);
 
         let mut b = DmxUniverse::new();
         b.set(0, 200).unwrap();
-        merger.update_source(src(SourceType::Fader, 2), &b);
+        merger.update_source(make_source(SourceType::Fader, 2), &b);
 
-        merger.remove_source(&src(SourceType::Fader, 2));
+        merger.remove_source(&make_source(SourceType::Fader, 2));
         let out = merger.compute();
         assert_eq!(out.get(0).unwrap(), 100);
     }
@@ -238,15 +238,15 @@ mod tests {
 
         let mut a = DmxUniverse::new();
         a.set(0, 50).unwrap();
-        merger.update_source(src(SourceType::Fader, 1), &a);
+        merger.update_source(make_source(SourceType::Fader, 1), &a);
 
         let mut b = DmxUniverse::new();
         b.set(0, 200).unwrap();
-        merger.update_source(src(SourceType::Cue, 1), &b);
+        merger.update_source(make_source(SourceType::Cue, 1), &b);
 
         let mut c = DmxUniverse::new();
         c.set(0, 150).unwrap();
-        merger.update_source(src(SourceType::Effect, 1), &c);
+        merger.update_source(make_source(SourceType::Effect, 1), &c);
 
         let out = merger.compute();
         assert_eq!(out.get(0).unwrap(), 200);
@@ -266,12 +266,12 @@ mod tests {
         let mut a = DmxUniverse::new();
         a.set(0, 100).unwrap();
         a.set(1, 200).unwrap();
-        merger.update_source(src(SourceType::Fader, 1), &a);
+        merger.update_source(make_source(SourceType::Fader, 1), &a);
 
         let mut b = DmxUniverse::new();
         b.set(0, 200).unwrap();
         b.set(1, 50).unwrap();
-        merger.update_source(src(SourceType::Fader, 2), &b);
+        merger.update_source(make_source(SourceType::Fader, 2), &b);
 
         let out = merger.compute();
         assert_eq!(out.get(0).unwrap(), 200);
@@ -284,13 +284,13 @@ mod tests {
 
         let mut a = DmxUniverse::new();
         a.set(0, 200).unwrap();
-        merger.update_source(src(SourceType::Fader, 1), &a);
+        merger.update_source(make_source(SourceType::Fader, 1), &a);
 
         assert_eq!(merger.compute().get(0).unwrap(), 200);
 
         // Lower the fader
         a.set(0, 50).unwrap();
-        merger.update_source(src(SourceType::Fader, 1), &a);
+        merger.update_source(make_source(SourceType::Fader, 1), &a);
 
         assert_eq!(merger.compute().get(0).unwrap(), 50);
     }
@@ -302,18 +302,18 @@ mod tests {
 
         let mut a = DmxUniverse::new();
         a.set(0, 100).unwrap();
-        merger.update_source(src(SourceType::Fader, 1), &a);
+        merger.update_source(make_source(SourceType::Fader, 1), &a);
 
         let mut b = DmxUniverse::new();
         b.set(0, 200).unwrap();
-        merger.update_source(src(SourceType::Fader, 2), &b);
+        merger.update_source(make_source(SourceType::Fader, 2), &b);
 
         // Fader 2 was updated last → 200
         assert_eq!(merger.compute().get(0).unwrap(), 200);
 
         // Update fader 1 again → now it's latest
         a.set(0, 50).unwrap();
-        merger.update_source(src(SourceType::Fader, 1), &a);
+        merger.update_source(make_source(SourceType::Fader, 1), &a);
         assert_eq!(merger.compute().get(0).unwrap(), 50);
     }
 
@@ -324,13 +324,13 @@ mod tests {
 
         let mut a = DmxUniverse::new();
         a.set(0, 100).unwrap();
-        merger.update_source(src(SourceType::Fader, 1), &a);
+        merger.update_source(make_source(SourceType::Fader, 1), &a);
 
         let mut b = DmxUniverse::new();
         b.set(0, 200).unwrap();
-        merger.update_source(src(SourceType::Fader, 2), &b);
+        merger.update_source(make_source(SourceType::Fader, 2), &b);
 
-        merger.remove_source(&src(SourceType::Fader, 2));
+        merger.remove_source(&make_source(SourceType::Fader, 2));
         assert_eq!(merger.compute().get(0).unwrap(), 100);
     }
 
@@ -343,12 +343,12 @@ mod tests {
         let mut a = DmxUniverse::new();
         a.set(0, 100).unwrap();
         a.set(1, 100).unwrap();
-        merger.update_source(src(SourceType::Fader, 1), &a);
+        merger.update_source(make_source(SourceType::Fader, 1), &a);
 
         let mut b = DmxUniverse::new();
         b.set(0, 50).unwrap();
         b.set(1, 50).unwrap();
-        merger.update_source(src(SourceType::Fader, 2), &b);
+        merger.update_source(make_source(SourceType::Fader, 2), &b);
 
         let out = merger.compute();
         // HTP: max(100, 50) = 100
@@ -372,15 +372,15 @@ mod tests {
 
         let mut fader = DmxUniverse::new();
         fader.set(0, 80).unwrap();
-        merger.update_source(src(SourceType::Fader, 1), &fader);
+        merger.update_source(make_source(SourceType::Fader, 1), &fader);
 
         let mut cue = DmxUniverse::new();
         cue.set(0, 120).unwrap();
-        merger.update_source(src(SourceType::Cue, 1), &cue);
+        merger.update_source(make_source(SourceType::Cue, 1), &cue);
 
         let mut sub = DmxUniverse::new();
         sub.set(0, 200).unwrap();
-        merger.update_source(src(SourceType::Submaster, 1), &sub);
+        merger.update_source(make_source(SourceType::Submaster, 1), &sub);
 
         assert_eq!(merger.compute().get(0).unwrap(), 200);
     }
@@ -395,7 +395,7 @@ mod tests {
         let mut a = DmxUniverse::new();
         a.set(0, 100).unwrap();
         a.set(1, 100).unwrap();
-        merger.update_source(src(SourceType::Fader, 1), &a);
+        merger.update_source(make_source(SourceType::Fader, 1), &a);
 
         // Source 2: set ch0=50, ch1=50, but only mask ch0
         let mut b = DmxUniverse::new();
@@ -403,7 +403,7 @@ mod tests {
         b.set(1, 50).unwrap();
         let mut mask = [false; 512];
         mask[0] = true;
-        merger.update_source_masked(src(SourceType::Fader, 2), &b, &mask);
+        merger.update_source_masked(make_source(SourceType::Fader, 2), &b, &mask);
 
         let out = merger.compute();
         // ch0: LTP, fader 2 masked → 50
@@ -421,7 +421,7 @@ mod tests {
         let mut a = DmxUniverse::new();
         a.set(0, 100).unwrap();
         a.set(1, 100).unwrap();
-        merger.update_source(src(SourceType::Fader, 1), &a);
+        merger.update_source(make_source(SourceType::Fader, 1), &a);
 
         // Source 2: ch0=200, ch1=50, mask only ch1
         let mut b = DmxUniverse::new();
@@ -429,7 +429,7 @@ mod tests {
         b.set(1, 50).unwrap();
         let mut mask = [false; 512];
         mask[1] = true;
-        merger.update_source_masked(src(SourceType::Fader, 2), &b, &mask);
+        merger.update_source_masked(make_source(SourceType::Fader, 2), &b, &mask);
 
         let out = merger.compute();
         // ch0: HTP, max(100, 200) = 200 (full universe stored regardless of mask)
@@ -446,19 +446,19 @@ mod tests {
         // Source 1: ch0=100
         let mut a = DmxUniverse::new();
         a.set(0, 100).unwrap();
-        merger.update_source(src(SourceType::Fader, 1), &a);
+        merger.update_source(make_source(SourceType::Fader, 1), &a);
 
         // Source 2: ch0=200
         let mut b = DmxUniverse::new();
         b.set(0, 200).unwrap();
-        merger.update_source(src(SourceType::Fader, 2), &b);
+        merger.update_source(make_source(SourceType::Fader, 2), &b);
 
         // Source 2 is latest → 200
         assert_eq!(merger.compute().get(0).unwrap(), 200);
 
         // Source 1 masked update with SAME value (100) → no LTP bump
         let mask = [true; 512];
-        merger.update_source_masked(src(SourceType::Fader, 1), &a, &mask);
+        merger.update_source_masked(make_source(SourceType::Fader, 1), &a, &mask);
 
         // Source 2 should still be latest → 200
         assert_eq!(merger.compute().get(0).unwrap(), 200);
@@ -474,21 +474,21 @@ mod tests {
         let mut a = DmxUniverse::new();
         a.set(0, 100).unwrap();
         a.set(1, 100).unwrap();
-        merger.update_source(src(SourceType::Fader, 1), &a);
+        merger.update_source(make_source(SourceType::Fader, 1), &a);
 
         // Source 2: mask only ch0
         let mut b = DmxUniverse::new();
         b.set(0, 50).unwrap();
         let mut mask0 = [false; 512];
         mask0[0] = true;
-        merger.update_source_masked(src(SourceType::Fader, 2), &b, &mask0);
+        merger.update_source_masked(make_source(SourceType::Fader, 2), &b, &mask0);
 
         // Source 3: mask only ch1
         let mut c = DmxUniverse::new();
         c.set(1, 75).unwrap();
         let mut mask1 = [false; 512];
         mask1[1] = true;
-        merger.update_source_masked(src(SourceType::Effect, 1), &c, &mask1);
+        merger.update_source_masked(make_source(SourceType::Effect, 1), &c, &mask1);
 
         let out = merger.compute();
         // ch0: source 2 latest → 50
@@ -504,17 +504,17 @@ mod tests {
 
         let mut a = DmxUniverse::new();
         a.set(0, 100).unwrap();
-        merger.update_source(src(SourceType::Fader, 1), &a);
+        merger.update_source(make_source(SourceType::Fader, 1), &a);
 
         // Masked update from source 2
         let mut b = DmxUniverse::new();
         b.set(0, 200).unwrap();
         let mask = [true; 512];
-        merger.update_source_masked(src(SourceType::Fader, 2), &b, &mask);
+        merger.update_source_masked(make_source(SourceType::Fader, 2), &b, &mask);
 
         assert_eq!(merger.compute().get(0).unwrap(), 200);
 
-        merger.remove_source(&src(SourceType::Fader, 2));
+        merger.remove_source(&make_source(SourceType::Fader, 2));
         assert_eq!(merger.compute().get(0).unwrap(), 100);
     }
 }

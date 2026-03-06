@@ -1,6 +1,6 @@
 import { create } from "zustand";
 import { floorMaterials, wallMaterials } from "../materials/registry";
-import { DEVICE_REGISTRY, activeCapabilities } from "../devices/registry";
+import { DEVICE_REGISTRY, activeFeatures } from "../devices/registry";
 import type { SceneObject, SceneObjectType } from "../scene/types";
 
 export type { SceneObject };
@@ -16,8 +16,8 @@ const MAX_HISTORY = 100;
 function generateCopyName(originName: string, existingNames: Set<string>): string {
   const baseName = `Copy of ${originName}`;
   if (!existingNames.has(baseName)) return baseName;
-  for (let n = 2; ; n++) {
-    const candidate = `${baseName} (${n})`;
+  for (let copyNumber = 2; ; copyNumber++) {
+    const candidate = `${baseName} (${copyNumber})`;
     if (!existingNames.has(candidate)) return candidate;
   }
 }
@@ -40,18 +40,18 @@ function buildNewObject(
 ): SceneObject {
   const def  = DEVICE_REGISTRY[type];
   const mode = def.defaultMode;
-  const caps = activeCapabilities(def, mode);
+  const features = activeFeatures(def, mode);
 
-  // Gather defaults from every capability in the starting mode.
-  const capabilityDefaults: Record<string, unknown> = {};
-  for (const { cap, config } of caps) {
-    Object.assign(capabilityDefaults, cap.defaultState(config));
+  // Gather defaults from every feature in the starting mode.
+  const featureDefaults: Record<string, unknown> = {};
+  for (const { feature, config } of features) {
+    Object.assign(featureDefaults, feature.defaultState(config));
   }
 
   // Auto-number the name when the device has one (e.g. "Moving Head" → "Moving Head 3").
-  if (typeof capabilityDefaults.name === "string") {
+  if (typeof featureDefaults.name === "string") {
     const count = existingObjects.filter((object) => object.type === type).length + 1;
-    capabilityDefaults.name = `${capabilityDefaults.name} ${count}`;
+    featureDefaults.name = `${featureDefaults.name} ${count}`;
   }
 
   return {
@@ -60,7 +60,7 @@ function buildNewObject(
     position,
     lockedFields: [],
     mode,
-    ...capabilityDefaults,
+    ...featureDefaults,
   } as unknown as SceneObject;
 }
 
@@ -196,7 +196,7 @@ export const useStageEditorStore = create<StageEditorStore>((set) => ({
   removeObjects: (ids) =>
     set((state) => ({
       ...pushHistory(state, { objects: state.objects.filter((o) => !ids.includes(o.id)) }),
-      selectedIds: state.selectedIds.filter((sid) => !ids.includes(sid)),
+      selectedIds: state.selectedIds.filter((selectedId) => !ids.includes(selectedId)),
     })),
   updateObject: (id, patch) =>
     set((state) =>
@@ -243,7 +243,7 @@ export const useStageEditorStore = create<StageEditorStore>((set) => ({
   toggleSelected: (id) =>
     set((state) => ({
       selectedIds: state.selectedIds.includes(id)
-        ? state.selectedIds.filter((sid) => sid !== id)
+        ? state.selectedIds.filter((selectedId) => selectedId !== id)
         : [...state.selectedIds, id],
     })),
   clearSelection: () => set({ selectedIds: [] }),
@@ -260,8 +260,8 @@ export const useStageEditorStore = create<StageEditorStore>((set) => ({
 
       const existingNames = new Set<string>(
         state.objects.flatMap((o) => {
-          const n = (o as unknown as Record<string, unknown>).name;
-          return typeof n === "string" ? [n] : [];
+          const objectName = (o as unknown as Record<string, unknown>).name;
+          return typeof objectName === "string" ? [objectName] : [];
         }),
       );
 
@@ -331,13 +331,13 @@ export const useStageEditorStore = create<StageEditorStore>((set) => ({
     })),
   _resumeHistory: () =>
     set((state) => {
-      const snap = state._prePauseSnapshot;
-      const changed = snap !== null && snapshotChanged(snap, snapshotFrom(state));
+      const prePauseSnapshot = state._prePauseSnapshot;
+      const changed = prePauseSnapshot !== null && snapshotChanged(prePauseSnapshot, snapshotFrom(state));
       return {
         _historyPaused: false,
         _prePauseSnapshot: null,
         ...(changed && {
-          _past: [...state._past.slice(-(MAX_HISTORY - 1)), snap!],
+          _past: [...state._past.slice(-(MAX_HISTORY - 1)), prePauseSnapshot!],
           _future: [],
         }),
       };

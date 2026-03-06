@@ -11,5 +11,5 @@ pub use error::EngineError;
 pub use fixture_mapper::{DmxChannelDef, DmxEncoding, FixtureMapping, StepEntry};
 pub use interpolation::InterpolationState;
 pub use merge::{MergeMode, OutputMerger, SourceId, SourceType};
-pub use output::{ArtNetOutput, DmxOutput, MockOutput, NullOutput, SacnOutput};
+pub use output::{ArtNetOutput, DmxOutput, EnttecProOutput, MockOutput, NullOutput, SacnOutput, TapFrame, TapOutput};
 pub use universe::DmxUniverse;

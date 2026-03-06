@@ -3,7 +3,7 @@ use axum::{
     http::StatusCode,
     Json,
 };
-use dlc_protocol::EngineCommand;
+use dlc_protocol::{EngineCommand, DMX_CHANNELS_PER_UNIVERSE};
 use serde::Deserialize;
 
 use crate::error::ApiError;
@@ -19,7 +19,7 @@ pub async fn set_channel(
     Path((universe, channel)): Path<(u16, u16)>,
     Json(body): Json<SetChannelBody>,
 ) -> Result<StatusCode, ApiError> {
-    if channel >= 512 {
+    if channel >= DMX_CHANNELS_PER_UNIVERSE as u16 {
         return Err(ApiError::bad_request("channel must be 0..511"));
     }
 
@@ -60,7 +60,8 @@ mod tests {
 
         let (tx, rx) = std::sync::mpsc::sync_channel(1024);
 
-        let cue_executor = crate::cue_executor::CueExecutor::new(db.clone(), tx.clone());
+        let fixture_types = std::sync::Arc::new(crate::fixture_types::load_embedded());
+        let cue_executor = crate::cue_executor::CueExecutor::new(db.clone(), tx.clone(), fixture_types.clone());
         let engine = dlc_engine::EngineHandle::start(
             Box::new(dlc_engine::NullOutput),
         );
@@ -73,6 +74,7 @@ mod tests {
             engine: std::sync::Arc::new(engine),
             ws_broadcast,
             cue_executor,
+            fixture_types,
         };
         (state, rx)
     }

@@ -5,6 +5,7 @@ use axum::{
 };
 use http_body_util::BodyExt;
 use sqlx::sqlite::SqlitePoolOptions;
+use std::sync::Arc;
 use tower::ServiceExt;
 
 use crate::config::ServerConfig;
@@ -22,16 +23,18 @@ pub async fn spawn_test_state() -> AppState {
         .unwrap();
     sqlx::migrate!("./migrations").run(&db).await.unwrap();
     let (engine_tx, _) = std::sync::mpsc::sync_channel(1024);
-    let cue_executor = CueExecutor::new(db.clone(), engine_tx.clone());
+    let fixture_types = Arc::new(crate::fixture_types::load_embedded());
+    let cue_executor = CueExecutor::new(db.clone(), engine_tx.clone(), fixture_types.clone());
     let engine = dlc_engine::EngineHandle::start(Box::new(dlc_engine::NullOutput));
     let (ws_broadcast, _) = tokio::sync::broadcast::channel(256);
     AppState {
-        config: std::sync::Arc::new(ServerConfig::from_env()),
+        config: Arc::new(ServerConfig::from_env()),
         db,
         engine_tx,
-        engine: std::sync::Arc::new(engine),
+        engine: Arc::new(engine),
         ws_broadcast,
         cue_executor,
+        fixture_types,
     }
 }
 
@@ -50,12 +53,12 @@ pub async fn body_json(resp: axum::response::Response) -> serde_json::Value {
     serde_json::from_slice(&bytes).unwrap()
 }
 
-pub async fn create_show(app: &Router, name: &str) -> String {
+pub async fn create_stage(app: &Router, name: &str) -> String {
     let resp = app
         .clone()
         .oneshot(json_request(
             Method::POST,
-            "/api/shows",
+            "/api/stages",
             Some(&format!(r#"{{"name":"{name}"}}"#)),
         ))
         .await
@@ -64,27 +67,52 @@ pub async fn create_show(app: &Router, name: &str) -> String {
     body["id"].as_str().unwrap().to_string()
 }
 
-pub async fn create_stage(app: &Router, show_id: &str, name: &str) -> String {
+pub async fn create_concert(app: &Router, stage_id: &str, name: &str) -> String {
+    let body = serde_json::json!({ "name": name, "stage_id": stage_id }).to_string();
     let resp = app
         .clone()
-        .oneshot(json_request(
-            Method::POST,
-            &format!("/api/shows/{show_id}/stages"),
-            Some(&format!(r#"{{"name":"{name}"}}"#)),
-        ))
+        .oneshot(json_request(Method::POST, "/api/concerts", Some(&body)))
         .await
         .unwrap();
-    let body = body_json(resp).await;
-    body["id"].as_str().unwrap().to_string()
+    body_json(resp).await["id"].as_str().unwrap().to_string()
 }
 
-pub async fn create_cue_list(app: &Router, show_id: &str, name: &str) -> String {
+pub async fn create_cue_list(app: &Router, concert_id: &str, name: &str) -> String {
     let body = serde_json::json!({ "name": name }).to_string();
     let resp = app
         .clone()
         .oneshot(json_request(
             Method::POST,
-            &format!("/api/shows/{show_id}/cuelists"),
+            &format!("/api/concerts/{concert_id}/cue-lists"),
+            Some(&body),
+        ))
+        .await
+        .unwrap();
+    body_json(resp).await["id"].as_str().unwrap().to_string()
+}
+
+pub async fn create_fixture(app: &Router, fixture_type_id: &str) -> String {
+    let body = serde_json::json!({ "fixture_type_id": fixture_type_id }).to_string();
+    let resp = app
+        .clone()
+        .oneshot(json_request(Method::POST, "/api/fixtures", Some(&body)))
+        .await
+        .unwrap();
+    body_json(resp).await["id"].as_str().unwrap().to_string()
+}
+
+pub async fn create_placement(app: &Router, stage_id: &str, fixture_id: &str) -> String {
+    let body = serde_json::json!({
+        "fixture_id": fixture_id,
+        "universe": 1,
+        "dmx_address": 1
+    })
+    .to_string();
+    let resp = app
+        .clone()
+        .oneshot(json_request(
+            Method::POST,
+            &format!("/api/stages/{stage_id}/placements"),
             Some(&body),
         ))
         .await

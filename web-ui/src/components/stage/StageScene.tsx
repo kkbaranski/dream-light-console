@@ -266,7 +266,7 @@ export function StageScene() {
       <Canvas
         camera={{ position: [0, 7, 38], fov: 50 }}
         shadows
-        gl={{ antialias: true, localClippingEnabled: true }}
+        gl={{ antialias: true, localClippingEnabled: true, toneMapping: THREE.AgXToneMapping }}
         onCreated={({ scene }) => {
           scene.background = new THREE.Color(BACKGROUND_COLOR);
         }}

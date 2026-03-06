@@ -20,7 +20,7 @@ const ACN_PACKET_ID: [u8; 12] = [
 /// Sends DMX universes as UDP multicast packets to `239.255.0.{universe}:5568`.
 pub struct SacnOutput {
     socket: UdpSocket,
-    cid: [u8; 16],
+    component_id: [u8; 16],
     source_name: [u8; 64],
     sequence: HashMap<u16, u8>,
     priority: u8,
@@ -29,7 +29,7 @@ pub struct SacnOutput {
 impl SacnOutput {
     pub fn new(priority: u8) -> Result<Self, EngineError> {
         let socket = UdpSocket::bind("0.0.0.0:0")?;
-        let cid = *uuid::Uuid::new_v4().as_bytes();
+        let component_id = *uuid::Uuid::new_v4().as_bytes();
 
         let mut source_name = [0u8; 64];
         let name = b"DreamLightConsole";
@@ -37,7 +37,7 @@ impl SacnOutput {
 
         Ok(Self {
             socket,
-            cid,
+            component_id,
             source_name,
             sequence: HashMap::new(),
             priority,
@@ -51,86 +51,86 @@ impl SacnOutput {
         sequence: u8,
         data: &[u8; 512],
     ) -> [u8; PACKET_SIZE] {
-        let mut pkt = [0u8; PACKET_SIZE];
+        let mut packet = [0u8; PACKET_SIZE];
 
         // ── Root Layer (offset 0) ────────────────────────────────────────
         // Preamble size (u16 BE)
-        pkt[0] = 0x00;
-        pkt[1] = 0x10;
+        packet[0] = 0x00;
+        packet[1] = 0x10;
         // Post-amble size (u16 BE)
-        pkt[2] = 0x00;
-        pkt[3] = 0x00;
+        packet[2] = 0x00;
+        packet[3] = 0x00;
         // ACN packet identifier (12 bytes)
-        pkt[4..16].copy_from_slice(&ACN_PACKET_ID);
+        packet[4..16].copy_from_slice(&ACN_PACKET_ID);
         // Flags (0x7) + length of remaining root layer data (638 - 16 = 622)
         let root_len: u16 = (PACKET_SIZE - 16) as u16;
-        pkt[16] = 0x70 | ((root_len >> 8) as u8 & 0x0F);
-        pkt[17] = root_len as u8;
+        packet[16] = 0x70 | ((root_len >> 8) as u8 & 0x0F);
+        packet[17] = root_len as u8;
         // Root vector: 0x00000004 (E1.31 data packet)
-        pkt[18] = 0x00;
-        pkt[19] = 0x00;
-        pkt[20] = 0x00;
-        pkt[21] = 0x04;
+        packet[18] = 0x00;
+        packet[19] = 0x00;
+        packet[20] = 0x00;
+        packet[21] = 0x04;
         // CID (16 bytes)
-        pkt[22..38].copy_from_slice(&self.cid);
+        packet[22..38].copy_from_slice(&self.component_id);
 
         // ── Framing Layer (offset 38) ────────────────────────────────────
         // Flags (0x7) + length of remaining framing layer (638 - 38 = 600)
         let framing_len: u16 = (PACKET_SIZE - 38) as u16;
-        pkt[38] = 0x70 | ((framing_len >> 8) as u8 & 0x0F);
-        pkt[39] = framing_len as u8;
+        packet[38] = 0x70 | ((framing_len >> 8) as u8 & 0x0F);
+        packet[39] = framing_len as u8;
         // Framing vector: 0x00000002
-        pkt[40] = 0x00;
-        pkt[41] = 0x00;
-        pkt[42] = 0x00;
-        pkt[43] = 0x02;
+        packet[40] = 0x00;
+        packet[41] = 0x00;
+        packet[42] = 0x00;
+        packet[43] = 0x02;
         // Source name (64 bytes, UTF-8 null-padded)
-        pkt[44..108].copy_from_slice(&self.source_name);
+        packet[44..108].copy_from_slice(&self.source_name);
         // Priority
-        pkt[108] = self.priority;
+        packet[108] = self.priority;
         // Synchronization address (u16 BE) = 0
-        pkt[109] = 0x00;
-        pkt[110] = 0x00;
+        packet[109] = 0x00;
+        packet[110] = 0x00;
         // Sequence number
-        pkt[111] = sequence;
+        packet[111] = sequence;
         // Options
-        pkt[112] = 0x00;
+        packet[112] = 0x00;
         // Universe number (u16 BE)
-        pkt[113] = (universe_id >> 8) as u8;
-        pkt[114] = universe_id as u8;
+        packet[113] = (universe_id >> 8) as u8;
+        packet[114] = universe_id as u8;
 
         // ── DMP Layer (offset 115) ───────────────────────────────────────
         // Flags (0x7) + length of remaining DMP layer (638 - 115 = 523)
         let dmp_len: u16 = (PACKET_SIZE - 115) as u16;
-        pkt[115] = 0x70 | ((dmp_len >> 8) as u8 & 0x0F);
-        pkt[116] = dmp_len as u8;
+        packet[115] = 0x70 | ((dmp_len >> 8) as u8 & 0x0F);
+        packet[116] = dmp_len as u8;
         // DMP vector: 0x02 (set property)
-        pkt[117] = 0x02;
+        packet[117] = 0x02;
         // Address type & data type: 0xA1
-        pkt[118] = 0xA1;
+        packet[118] = 0xA1;
         // First property address (u16 BE) = 0
-        pkt[119] = 0x00;
-        pkt[120] = 0x00;
+        packet[119] = 0x00;
+        packet[120] = 0x00;
         // Address increment (u16 BE) = 1
-        pkt[121] = 0x00;
-        pkt[122] = 0x01;
+        packet[121] = 0x00;
+        packet[122] = 0x01;
         // Property value count (u16 BE) = 513 (start code + 512 channels)
-        pkt[123] = 0x02;
-        pkt[124] = 0x01;
+        packet[123] = 0x02;
+        packet[124] = 0x01;
         // DMX start code
-        pkt[125] = 0x00;
+        packet[125] = 0x00;
         // DMX channel data (512 bytes)
-        pkt[126..PACKET_SIZE].copy_from_slice(data);
+        packet[126..PACKET_SIZE].copy_from_slice(data);
 
-        pkt
+        packet
     }
 }
 
 impl DmxOutput for SacnOutput {
     fn send_universe(&mut self, universe_id: u16, data: &[u8; 512]) -> Result<(), EngineError> {
-        let seq = *self.sequence.entry(universe_id).or_insert(0);
-        let packet = self.build_packet(universe_id, seq, data);
-        self.sequence.insert(universe_id, seq.wrapping_add(1));
+        let sequence_number = *self.sequence.entry(universe_id).or_insert(0);
+        let packet = self.build_packet(universe_id, sequence_number, data);
+        self.sequence.insert(universe_id, sequence_number.wrapping_add(1));
 
         let high = ((universe_id >> 8) & 0xFF) as u8;
         let low = (universe_id & 0xFF) as u8;
@@ -158,7 +158,7 @@ fn build_test_packet(
     let output = SacnOutput {
         // SAFETY: we only call build_packet, never send_to. The socket is unused.
         socket: UdpSocket::bind("0.0.0.0:0").unwrap(),
-        cid: *cid,
+        component_id: *cid,
         source_name: *source_name,
         sequence: HashMap::new(),
         priority,
@@ -186,60 +186,60 @@ mod tests {
     #[test]
     fn sacn_packet_size_is_638() {
         let data = [0u8; 512];
-        let pkt = build_test_packet(&test_cid(), &test_source_name(), 100, 1, 0, &data);
-        assert_eq!(pkt.len(), 638);
+        let packet = build_test_packet(&test_cid(), &test_source_name(), 100, 1, 0, &data);
+        assert_eq!(packet.len(), 638);
     }
 
     #[test]
     fn sacn_preamble_and_acn_id() {
-        let pkt = build_test_packet(&test_cid(), &test_source_name(), 100, 1, 0, &[0u8; 512]);
+        let packet = build_test_packet(&test_cid(), &test_source_name(), 100, 1, 0, &[0u8; 512]);
         // Preamble
-        assert_eq!(&pkt[0..2], &[0x00, 0x10]);
+        assert_eq!(&packet[0..2], &[0x00, 0x10]);
         // Post-amble
-        assert_eq!(&pkt[2..4], &[0x00, 0x00]);
+        assert_eq!(&packet[2..4], &[0x00, 0x00]);
         // ACN packet identifier
-        assert_eq!(&pkt[4..16], &ACN_PACKET_ID);
+        assert_eq!(&packet[4..16], &ACN_PACKET_ID);
     }
 
     #[test]
     fn sacn_root_layer_vector_and_flags() {
-        let pkt = build_test_packet(&test_cid(), &test_source_name(), 100, 1, 0, &[0u8; 512]);
+        let packet = build_test_packet(&test_cid(), &test_source_name(), 100, 1, 0, &[0u8; 512]);
         // Root flags+length: 0x7000 | 622 = 0x726E
-        assert_eq!(pkt[16], 0x72);
-        assert_eq!(pkt[17], 0x6E);
+        assert_eq!(packet[16], 0x72);
+        assert_eq!(packet[17], 0x6E);
         // Root vector: 0x00000004
-        assert_eq!(&pkt[18..22], &[0x00, 0x00, 0x00, 0x04]);
+        assert_eq!(&packet[18..22], &[0x00, 0x00, 0x00, 0x04]);
     }
 
     #[test]
     fn sacn_cid_is_embedded() {
         let cid = test_cid();
-        let pkt = build_test_packet(&cid, &test_source_name(), 100, 1, 0, &[0u8; 512]);
-        assert_eq!(&pkt[22..38], &cid);
+        let packet = build_test_packet(&cid, &test_source_name(), 100, 1, 0, &[0u8; 512]);
+        assert_eq!(&packet[22..38], &cid);
     }
 
     #[test]
     fn sacn_framing_layer() {
-        let pkt = build_test_packet(&test_cid(), &test_source_name(), 100, 1, 0, &[0u8; 512]);
+        let packet = build_test_packet(&test_cid(), &test_source_name(), 100, 1, 0, &[0u8; 512]);
         // Framing flags+length: 0x7000 | 600 = 0x7258
-        assert_eq!(pkt[38], 0x72);
-        assert_eq!(pkt[39], 0x58);
+        assert_eq!(packet[38], 0x72);
+        assert_eq!(packet[39], 0x58);
         // Framing vector: 0x00000002
-        assert_eq!(&pkt[40..44], &[0x00, 0x00, 0x00, 0x02]);
+        assert_eq!(&packet[40..44], &[0x00, 0x00, 0x00, 0x02]);
         // Source name starts at 44
-        assert_eq!(&pkt[44..61], b"DreamLightConsole");
+        assert_eq!(&packet[44..61], b"DreamLightConsole");
         // Priority
-        assert_eq!(pkt[108], 100);
+        assert_eq!(packet[108], 100);
         // Sequence
-        assert_eq!(pkt[111], 0);
+        assert_eq!(packet[111], 0);
     }
 
     #[test]
     fn sacn_universe_number() {
-        let pkt = build_test_packet(&test_cid(), &test_source_name(), 100, 7, 0, &[0u8; 512]);
+        let packet = build_test_packet(&test_cid(), &test_source_name(), 100, 7, 0, &[0u8; 512]);
         // Universe (u16 BE) at offset 113-114
-        assert_eq!(pkt[113], 0x00);
-        assert_eq!(pkt[114], 0x07);
+        assert_eq!(packet[113], 0x00);
+        assert_eq!(packet[114], 0x07);
     }
 
     #[test]
@@ -247,20 +247,20 @@ mod tests {
         let mut data = [0u8; 512];
         data[0] = 255;
         data[511] = 128;
-        let pkt = build_test_packet(&test_cid(), &test_source_name(), 100, 1, 0, &data);
+        let packet = build_test_packet(&test_cid(), &test_source_name(), 100, 1, 0, &data);
 
         // DMP flags+length: 0x7000 | 523 = 0x720B
-        assert_eq!(pkt[115], 0x72);
-        assert_eq!(pkt[116], 0x0B);
+        assert_eq!(packet[115], 0x72);
+        assert_eq!(packet[116], 0x0B);
         // DMP vector
-        assert_eq!(pkt[117], 0x02);
+        assert_eq!(packet[117], 0x02);
         // Address type
-        assert_eq!(pkt[118], 0xA1);
+        assert_eq!(packet[118], 0xA1);
         // Start code
-        assert_eq!(pkt[125], 0x00);
+        assert_eq!(packet[125], 0x00);
         // DMX data
-        assert_eq!(pkt[126], 255);
-        assert_eq!(pkt[637], 128);
+        assert_eq!(packet[126], 255);
+        assert_eq!(packet[637], 128);
     }
 
     #[test]
@@ -272,8 +272,8 @@ mod tests {
         let mut data = [0u8; 512];
         data[0] = 1;
         // Sequence 254
-        let pkt = output.build_packet(1, 254, &data);
-        assert_eq!(pkt[111], 254);
+        let packet = output.build_packet(1, 254, &data);
+        assert_eq!(packet[111], 254);
 
         // Simulate two sends to verify wrapping via send_universe
         // After the insert of 254, first send uses 254 and increments to 255
@@ -285,8 +285,8 @@ mod tests {
 
     #[test]
     fn sacn_priority_is_configurable() {
-        let pkt = build_test_packet(&test_cid(), &test_source_name(), 200, 1, 0, &[0u8; 512]);
-        assert_eq!(pkt[108], 200);
+        let packet = build_test_packet(&test_cid(), &test_source_name(), 200, 1, 0, &[0u8; 512]);
+        assert_eq!(packet[108], 200);
     }
 
     #[test]

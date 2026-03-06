@@ -56,37 +56,37 @@ impl ArtNetOutput {
         sequence: u8,
         data: &[u8; 512],
     ) -> [u8; PACKET_SIZE] {
-        let mut pkt = [0u8; PACKET_SIZE];
+        let mut packet = [0u8; PACKET_SIZE];
 
         // Header: "Art-Net\0"
-        pkt[0..8].copy_from_slice(&ARTNET_ID);
+        packet[0..8].copy_from_slice(&ARTNET_ID);
         // OpCode (little-endian 0x5000)
-        pkt[8..10].copy_from_slice(&OPCODE_DMX_LE);
+        packet[8..10].copy_from_slice(&OPCODE_DMX_LE);
         // Protocol version (big-endian 0x000E)
-        pkt[10..12].copy_from_slice(&PROTOCOL_VERSION_BE);
+        packet[10..12].copy_from_slice(&PROTOCOL_VERSION_BE);
         // Sequence
-        pkt[12] = sequence;
+        packet[12] = sequence;
         // Physical port
-        pkt[13] = 0;
+        packet[13] = 0;
         // SubUni (low byte of universe)
-        pkt[14] = (universe_id & 0xFF) as u8;
+        packet[14] = (universe_id & 0xFF) as u8;
         // Net (high 7 bits of universe)
-        pkt[15] = ((universe_id >> 8) & 0x7F) as u8;
+        packet[15] = ((universe_id >> 8) & 0x7F) as u8;
         // Length (big-endian, 512)
-        pkt[16] = 0x02;
-        pkt[17] = 0x00;
+        packet[16] = 0x02;
+        packet[17] = 0x00;
         // DMX data
-        pkt[18..PACKET_SIZE].copy_from_slice(data);
+        packet[18..PACKET_SIZE].copy_from_slice(data);
 
-        pkt
+        packet
     }
 }
 
 impl DmxOutput for ArtNetOutput {
     fn send_universe(&mut self, universe_id: u16, data: &[u8; 512]) -> Result<(), EngineError> {
-        let seq = *self.sequence.entry(universe_id).or_insert(0);
-        let packet = Self::build_packet(universe_id, seq, data);
-        self.sequence.insert(universe_id, seq.wrapping_add(1));
+        let sequence_number = *self.sequence.entry(universe_id).or_insert(0);
+        let packet = Self::build_packet(universe_id, sequence_number, data);
+        self.sequence.insert(universe_id, sequence_number.wrapping_add(1));
 
         self.socket.send_to(&packet, self.target)?;
         Ok(())
@@ -104,67 +104,67 @@ mod tests {
 
     #[test]
     fn artnet_packet_size_is_530() {
-        let pkt = ArtNetOutput::build_packet(1, 0, &[0u8; 512]);
-        assert_eq!(pkt.len(), 530);
+        let packet = ArtNetOutput::build_packet(1, 0, &[0u8; 512]);
+        assert_eq!(packet.len(), 530);
     }
 
     #[test]
     fn artnet_header_magic() {
-        let pkt = ArtNetOutput::build_packet(1, 0, &[0u8; 512]);
-        assert_eq!(&pkt[0..8], b"Art-Net\0");
+        let packet = ArtNetOutput::build_packet(1, 0, &[0u8; 512]);
+        assert_eq!(&packet[0..8], b"Art-Net\0");
     }
 
     #[test]
     fn artnet_opcode_is_little_endian() {
-        let pkt = ArtNetOutput::build_packet(1, 0, &[0u8; 512]);
-        assert_eq!(pkt[8], 0x00);
-        assert_eq!(pkt[9], 0x50);
+        let packet = ArtNetOutput::build_packet(1, 0, &[0u8; 512]);
+        assert_eq!(packet[8], 0x00);
+        assert_eq!(packet[9], 0x50);
     }
 
     #[test]
     fn artnet_protocol_version() {
-        let pkt = ArtNetOutput::build_packet(1, 0, &[0u8; 512]);
-        assert_eq!(pkt[10], 0x00);
-        assert_eq!(pkt[11], 0x0E);
+        let packet = ArtNetOutput::build_packet(1, 0, &[0u8; 512]);
+        assert_eq!(packet[10], 0x00);
+        assert_eq!(packet[11], 0x0E);
     }
 
     #[test]
     fn artnet_sequence_and_physical() {
-        let pkt = ArtNetOutput::build_packet(1, 42, &[0u8; 512]);
-        assert_eq!(pkt[12], 42);
-        assert_eq!(pkt[13], 0);
+        let packet = ArtNetOutput::build_packet(1, 42, &[0u8; 512]);
+        assert_eq!(packet[12], 42);
+        assert_eq!(packet[13], 0);
     }
 
     #[test]
     fn artnet_universe_mapping_low() {
         // Universe 3 → SubUni=3, Net=0
-        let pkt = ArtNetOutput::build_packet(3, 0, &[0u8; 512]);
-        assert_eq!(pkt[14], 3);
-        assert_eq!(pkt[15], 0);
+        let packet = ArtNetOutput::build_packet(3, 0, &[0u8; 512]);
+        assert_eq!(packet[14], 3);
+        assert_eq!(packet[15], 0);
     }
 
     #[test]
     fn artnet_universe_mapping_high() {
         // Universe 0x0301 (769) → SubUni=0x01, Net=0x03
-        let pkt = ArtNetOutput::build_packet(0x0301, 0, &[0u8; 512]);
-        assert_eq!(pkt[14], 0x01);
-        assert_eq!(pkt[15], 0x03);
+        let packet = ArtNetOutput::build_packet(0x0301, 0, &[0u8; 512]);
+        assert_eq!(packet[14], 0x01);
+        assert_eq!(packet[15], 0x03);
     }
 
     #[test]
     fn artnet_universe_net_masks_high_bit() {
         // Universe 0xFF01 → SubUni=0x01, Net=0x7F (top bit masked)
-        let pkt = ArtNetOutput::build_packet(0xFF01, 0, &[0u8; 512]);
-        assert_eq!(pkt[14], 0x01);
-        assert_eq!(pkt[15], 0x7F);
+        let packet = ArtNetOutput::build_packet(0xFF01, 0, &[0u8; 512]);
+        assert_eq!(packet[14], 0x01);
+        assert_eq!(packet[15], 0x7F);
     }
 
     #[test]
     fn artnet_length_field() {
-        let pkt = ArtNetOutput::build_packet(1, 0, &[0u8; 512]);
+        let packet = ArtNetOutput::build_packet(1, 0, &[0u8; 512]);
         // 512 big-endian = 0x0200
-        assert_eq!(pkt[16], 0x02);
-        assert_eq!(pkt[17], 0x00);
+        assert_eq!(packet[16], 0x02);
+        assert_eq!(packet[17], 0x00);
     }
 
     #[test]
@@ -172,9 +172,9 @@ mod tests {
         let mut data = [0u8; 512];
         data[0] = 255;
         data[511] = 128;
-        let pkt = ArtNetOutput::build_packet(1, 0, &data);
-        assert_eq!(pkt[18], 255);
-        assert_eq!(pkt[529], 128);
+        let packet = ArtNetOutput::build_packet(1, 0, &data);
+        assert_eq!(packet[18], 255);
+        assert_eq!(packet[529], 128);
     }
 
     #[test]

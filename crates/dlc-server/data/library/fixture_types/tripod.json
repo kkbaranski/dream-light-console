@@ -1,0 +1,19 @@
+{
+  "id": "tripod",
+  "label": "Tripod",
+  "modelPath": "/models/stands/tripod.glb",
+  "targetHeight": 8.0,
+  "supportsGroupDrag": false,
+  "supportsAdditiveSelect": false,
+  "supportsCopyPaste": false,
+  "defaultMode": "default",
+  "modes": {
+    "default": {
+      "label": "Default",
+      "innerPole": {
+        "modelNode": "InnerPole"
+      },
+      "transform": {}
+    }
+  }
+}

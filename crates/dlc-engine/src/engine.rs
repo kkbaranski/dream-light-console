@@ -107,10 +107,10 @@ impl Engine {
             }
 
             // 2. Tick interpolations
-            for (&universe_id, interp) in &mut self.interpolations {
-                if interp.is_fading() {
-                    if let Some(uni) = self.universes.get_mut(&universe_id) {
-                        interp.tick(uni);
+            for (&universe_id, interpolation) in &mut self.interpolations {
+                if interpolation.is_fading() {
+                    if let Some(universe_buffer) = self.universes.get_mut(&universe_id) {
+                        interpolation.tick(universe_buffer);
                     }
                 }
             }

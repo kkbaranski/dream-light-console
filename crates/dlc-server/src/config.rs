@@ -7,6 +7,7 @@ pub struct ServerConfig {
     pub dmx_output_type: String,
     pub dmx_target_ip: Option<String>,
     pub sacn_priority: u8,
+    pub dmx_serial_port: Option<String>,
 }
 
 const DEFAULT_SACN_PRIORITY: u8 = 100;
@@ -31,6 +32,7 @@ impl ServerConfig {
                 .ok()
                 .and_then(|v| v.parse().ok())
                 .unwrap_or(DEFAULT_SACN_PRIORITY),
+            dmx_serial_port: std::env::var("DLC_SERIAL_PORT").ok(),
         }
     }
 

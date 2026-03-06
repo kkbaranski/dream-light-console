@@ -1,0 +1,16 @@
+{
+  "id": "mic",
+  "label": "Microphone",
+  "modelPath": "/models/mic.glb",
+  "targetHeight": 3.0,
+  "supportsGroupDrag": false,
+  "supportsAdditiveSelect": false,
+  "supportsCopyPaste": false,
+  "defaultMode": "default",
+  "modes": {
+    "default": {
+      "label": "Default",
+      "transform": {}
+    }
+  }
+}

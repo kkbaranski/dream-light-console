@@ -1,0 +1,63 @@
+{
+  "id": "moving_head",
+  "label": "Moving Head",
+  "modelPath": "/models/lights/moving_head.glb",
+  "targetHeight": 1,
+  "supportsGroupDrag": true,
+  "supportsAdditiveSelect": true,
+  "supportsCopyPaste": true,
+  "defaultMode": "sevenChannel",
+  "modes": {
+    "sevenChannel": {
+      "label": "7 Channel",
+      "name": {
+        "defaultName": "Moving Head"
+      },
+      "dmx": {},
+      "power": {},
+      "transform": {},
+      "dimmer": {
+        "dmx": {
+          "offset": 0
+        }
+      },
+      "pan": {
+        "dmx": {
+          "offset": 1
+        },
+        "modelNode": "Yoke",
+        "totalDegrees": 540
+      },
+      "tilt": {
+        "dmx": {
+          "offset": 2
+        },
+        "modelNode": "Head",
+        "startDegrees": 0,
+        "totalDegrees": 359
+      },
+      "rgbColor": {
+        "dmx": {
+          "red": 3,
+          "green": 4,
+          "blue": 5
+        },
+        "defaultColor": "#ffffff"
+      },
+      "beam": {
+        "dmx": {
+          "offset": 6
+        },
+        "glowMaterialName": "Glow",
+        "lensOffset": 0.06,
+        "lensRadius": 0.08,
+        "coneAngle": {
+          "min": 1,
+          "max": 60,
+          "default": 15
+        },
+        "coneOpacity": 0.35
+      }
+    }
+  }
+}

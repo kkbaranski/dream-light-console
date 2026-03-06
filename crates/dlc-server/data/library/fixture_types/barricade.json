@@ -1,0 +1,16 @@
+{
+  "id": "barricade",
+  "label": "Barricade",
+  "modelPath": "/models/barricade.glb",
+  "targetHeight": 2.5,
+  "supportsGroupDrag": false,
+  "supportsAdditiveSelect": false,
+  "supportsCopyPaste": false,
+  "defaultMode": "default",
+  "modes": {
+    "default": {
+      "label": "Default",
+      "transform": {}
+    }
+  }
+}

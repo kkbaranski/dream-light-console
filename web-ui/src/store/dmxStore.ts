@@ -13,8 +13,8 @@ interface DMXStore {
   // setters
   setChannels: (channels: number[]) => void;
   setChannel: (index: number, value: number) => void;
-  setConnected: (v: boolean) => void;
-  setBackendOnline: (v: boolean) => void;
+  setConnected: (isConnected: boolean) => void;
+  setBackendOnline: (backendOnline: boolean) => void;
   setLatencyMs: (ms: number | null) => void;
   /** Called once by useWebSocket to inject the real send functions. */
   _bindControls: (

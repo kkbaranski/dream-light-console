@@ -1,0 +1,16 @@
+{
+  "id": "disco_ball2",
+  "label": "Disco Ball 2",
+  "modelPath": "/models/other/disco_ball2.glb",
+  "targetHeight": 1.5,
+  "supportsGroupDrag": false,
+  "supportsAdditiveSelect": false,
+  "supportsCopyPaste": false,
+  "defaultMode": "default",
+  "modes": {
+    "default": {
+      "label": "Default",
+      "transform": {}
+    }
+  }
+}

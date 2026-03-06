@@ -7,6 +7,7 @@ use axum::{
 pub enum ApiError {
     NotFound(String),
     BadRequest(String),
+    Conflict(String),
     Internal(String),
 }
 
@@ -18,6 +19,10 @@ impl ApiError {
     pub fn bad_request(msg: impl Into<String>) -> Self {
         Self::BadRequest(msg.into())
     }
+
+    pub fn conflict(msg: impl Into<String>) -> Self {
+        Self::Conflict(msg.into())
+    }
 }
 
 impl IntoResponse for ApiError {
@@ -25,6 +30,7 @@ impl IntoResponse for ApiError {
         let (status, message) = match self {
             ApiError::NotFound(msg) => (StatusCode::NOT_FOUND, msg),
             ApiError::BadRequest(msg) => (StatusCode::BAD_REQUEST, msg),
+            ApiError::Conflict(msg) => (StatusCode::CONFLICT, msg),
             ApiError::Internal(msg) => (StatusCode::INTERNAL_SERVER_ERROR, msg),
         };
         (status, Json(serde_json::json!({ "error": message }))).into_response()

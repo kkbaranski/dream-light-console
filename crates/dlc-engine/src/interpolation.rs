@@ -51,17 +51,17 @@ impl InterpolationState {
     /// values to the universe. Completed interpolations are removed.
     pub fn tick(&mut self, universe: &mut DmxUniverse) {
         for (i, slot) in self.channels.iter_mut().enumerate() {
-            let Some(interp) = slot else { continue };
+            let Some(interpolation) = slot else { continue };
 
-            interp.progress += interp.step;
+            interpolation.progress += interpolation.step;
 
-            if interp.progress >= 1.0 {
+            if interpolation.progress >= 1.0 {
                 // Completed — set exact target to avoid floating-point drift
-                let _ = universe.set(i as u16, interp.target);
+                let _ = universe.set(i as u16, interpolation.target);
                 *slot = None;
             } else {
-                let value = interp.source as f32
-                    + (interp.target as f32 - interp.source as f32) * interp.progress;
+                let value = interpolation.source as f32
+                    + (interpolation.target as f32 - interpolation.source as f32) * interpolation.progress;
                 let _ = universe.set(i as u16, value.round() as u8);
             }
         }

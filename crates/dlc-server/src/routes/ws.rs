@@ -5,13 +5,11 @@ use axum::{
     },
     response::IntoResponse,
 };
-use dlc_protocol::EngineCommand;
+use dlc_protocol::{EngineCommand, DMX_CHANNELS_PER_UNIVERSE};
 use futures_util::{SinkExt, StreamExt};
 use serde::Deserialize;
 
 use crate::state::{AppState, WsBroadcast};
-
-const DMX_CHANNELS: usize = 512;
 
 pub async fn upgrade(
     ws: WebSocketUpgrade,
@@ -50,7 +48,11 @@ async fn handle_connection(socket: WebSocket, state: AppState) {
         loop {
             tokio::select! {
                 broadcast = broadcast_rx.recv() => {
-                    let Ok(msg) = broadcast else { break };
+                    let msg = match broadcast {
+                        Ok(msg) => msg,
+                        Err(tokio::sync::broadcast::error::RecvError::Lagged(_)) => continue,
+                        Err(_) => break,
+                    };
                     let json = match msg {
                         WsBroadcast::UniverseUpdate { universe, channels } => {
                             serde_json::json!({
@@ -108,7 +110,7 @@ async fn dispatch_message(
 
     match msg {
         IncomingMessage::SetChannel { universe, channel, value } => {
-            if channel >= DMX_CHANNELS as u16 {
+            if channel >= DMX_CHANNELS_PER_UNIVERSE as u16 {
                 return;
             }
             let _ = state.engine_tx.try_send(EngineCommand::SetChannel {
@@ -120,7 +122,7 @@ async fn dispatch_message(
         IncomingMessage::SetChannels { universe, data } => {
             for (key, value) in &data {
                 if let Ok(ch) = key.parse::<u16>() {
-                    if (ch as usize) < DMX_CHANNELS {
+                    if (ch as usize) < DMX_CHANNELS_PER_UNIVERSE {
                         let _ = state.engine_tx.try_send(EngineCommand::SetChannel {
                             universe,
                             channel: ch,
@@ -131,10 +133,10 @@ async fn dispatch_message(
             }
         }
         IncomingMessage::SetUniverse { universe, data } => {
-            if data.len() != DMX_CHANNELS {
+            if data.len() != DMX_CHANNELS_PER_UNIVERSE {
                 return;
             }
-            let mut buf = Box::new([0u8; DMX_CHANNELS]);
+            let mut buf = Box::new([0u8; DMX_CHANNELS_PER_UNIVERSE]);
             buf.copy_from_slice(&data);
             let _ = state.engine_tx.try_send(EngineCommand::SetUniverse {
                 universe,

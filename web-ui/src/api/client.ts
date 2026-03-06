@@ -36,9 +36,18 @@ async function patch<T>(path: string, body: unknown): Promise<T> {
   return response.json() as Promise<T>;
 }
 
-async function del(path: string): Promise<void> {
+async function httpDelete(path: string): Promise<void> {
   const response = await fetch(`${BASE_URL}${path}`, { method: "DELETE" });
   if (!response.ok) throw new Error(response.statusText);
 }
 
-export const api = { get, put, post, patch, del };
+async function putBlob(path: string, blob: Blob, contentType: string): Promise<void> {
+  const response = await fetch(`${BASE_URL}${path}`, {
+    method: "PUT",
+    headers: { "Content-Type": contentType },
+    body: blob,
+  });
+  if (!response.ok) throw new Error(response.statusText);
+}
+
+export const api = { get, put, post, patch, del: httpDelete, putBlob };

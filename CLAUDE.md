@@ -20,7 +20,7 @@ DreamLightConsole/
 │   ├── src/
 │   │   ├── api/               ← REST client + TanStack Query hooks
 │   │   ├── components/        ← React components (stage/, dmx/, layout/, ui/)
-│   │   ├── devices/           ← Capability system (THE core abstraction)
+│   │   ├── devices/           ← Feature system (THE core abstraction)
 │   │   ├── hooks/             ← useObjectDrag, useWebSocket
 │   │   ├── materials/         ← Floor/wall material registry
 │   │   ├── pages/             ← Route-level page components
@@ -35,24 +35,24 @@ DreamLightConsole/
 └── docs/                      ← User documentation
 ```
 
-## The Capability System (Critical Context)
+## The Feature System (Critical Context)
 
 The most important abstraction in this project lives in `web-ui/src/devices/`. Every AI agent touching frontend code MUST understand this before making changes.
 
-A **device** (Moving Head, Gobo, Fresnel, Speaker, etc.) is defined in `registry.ts` as a `DeviceDef` with one or more **modes**. Each mode composes **capabilities**: `name`, `dmx`, `power`, `transform`, `dimmer`, `pan`, `tilt`, `rgbColor`, `colorWheel`, `dualWhite`, `innerPole`, `beam`.
+A **device** (Moving Head, Gobo, Fresnel, Speaker, etc.) is defined in `registry.ts` as a `DeviceDef` with one or more **modes**. Each mode composes **features**: `name`, `dmx`, `power`, `transform`, `dimmer`, `pan`, `tilt`, `rgbColor`, `colorWheel`, `dualWhite`, `innerPole`, `beam`.
 
-Each capability (`CapabilityDef<TConfig>`) self-describes:
+Each feature (`FeatureDef<TConfig>`) self-describes:
 - `defaultState(config)` — initial field values for a SceneObject
 - `dmxChannels(config)` — DMX channel layout (offsets, encodings)
-- `applyToModel(model, obj, config, boundCaps)` — per-frame GLTF mutations (runs in useFrame)
+- `applyToModel(model, obj, config, boundFeatures)` — per-frame GLTF mutations (runs in useFrame)
 - `Inspector` — React component for the right-side panel
 - `headerWidget` — compact control in the inspector header
 
-Capabilities are composed via `bind(cap, config)` and resolved at runtime via `activeCapabilities(def, modeKey)` with WeakMap caching.
+Features are composed via `bind(feature, config)` and resolved at runtime via `activeFeatures(def, modeKey)` with WeakMap caching.
 
 **To add a new device**: add an entry to `DEVICE_REGISTRY` in `registry.ts`. No other files need to change.
 
-**To add a new capability**: create a file in `devices/capabilities/`, export from `index.ts`, add to `CAPABILITY_MAP` in `registry.ts`, and add the config type to `FixtureMode`.
+**To add a new feature**: create a file in `devices/features/`, export from `index.ts`, add to `FEATURE_MAP` in `registry.ts`, and add the config type to `FixtureMode`.
 
 ## Naming Conventions
 
@@ -69,7 +69,7 @@ Capabilities are composed via `bind(cap, config)` and resolved at runtime via `a
 - `PascalCase` for components, types, interfaces, enums
 - Zustand stores: `use{Domain}Store` (e.g., `useStageEditorStore`, `useDMXStore`)
 - Hooks: `use{Verb}{Noun}` (e.g., `useObjectDrag`, `useWebSocket`)
-- Capability types: `{Name}Config` (e.g., `BeamConfig`, `PanConfig`)
+- Feature types: `{Name}Config` (e.g., `BeamConfig`, `PanConfig`)
 - File names: `PascalCase.tsx` for components, `camelCase.ts` for utilities
 
 ### Shared
@@ -187,7 +187,7 @@ cd web-ui && npm run lint                  # ESLint
 
 ## Critical Files (understand before modifying)
 
-- `web-ui/src/devices/capability.ts` — Core type system. Changes cascade everywhere.
-- `web-ui/src/devices/registry.ts` — Device definitions + capability resolution.
+- `web-ui/src/devices/feature.ts` — Core type system. Changes cascade everywhere.
+- `web-ui/src/devices/registry.ts` — Device definitions + feature resolution.
 - `web-ui/src/store/stageEditorStore.ts` — Complex undo/redo + history pause.
 - `crates/dlc-protocol/src/lib.rs` — Wire protocol types. Changes require updating both Rust and TS.

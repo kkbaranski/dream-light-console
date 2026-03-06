@@ -1,15 +1,17 @@
 import { useStageEditorStore } from "../../store/stageEditorStore";
-import { DEVICE_REGISTRY, activeCapabilities } from "../../devices/registry";
-import type { InspectorCtx, CapObject, BoundCapability } from "../../devices/capability";
+import { DEVICE_REGISTRY, activeFeatures } from "../../devices/registry";
+import { FEATURE_CATEGORIES } from "../../devices/feature";
+import type { InspectorCtx, FeatureObject, BoundFeature } from "../../devices/feature";
+import { CategorySection } from "./inspectorPrimitives";
 import type { SceneObject } from "../../scene/types";
 
-/** Capabilities present in every selected object (intersection by cap.type). */
-function sharedCapabilities(selected: SceneObject[]): ReadonlyArray<BoundCapability> {
-  const capSets = selected.map((obj) =>
-    activeCapabilities(DEVICE_REGISTRY[obj.type], obj.mode),
+/** Features present in every selected object (intersection by feature.type). */
+function sharedFeatures(selected: SceneObject[]): ReadonlyArray<BoundFeature> {
+  const featureSets = selected.map((obj) =>
+    activeFeatures(DEVICE_REGISTRY[obj.type], obj.mode),
   );
-  return capSets[0].filter((bound) =>
-    capSets.every((set) => set.some((b) => b.cap.type === bound.cap.type)),
+  return featureSets[0].filter((bound) =>
+    featureSets.every((set) => set.some((b) => b.feature.type === bound.feature.type)),
   );
 }
 
@@ -21,7 +23,7 @@ function buildCtx(
 ): InspectorCtx {
   const count = selected.length;
 
-  function shared<V,>(getter: (obj: CapObject) => V): V | null {
+  function shared<V,>(getter: (obj: FeatureObject) => V): V | null {
     const values = selected.map(getter);
     return values.every((v) => v === values[0]) ? values[0] : null;
   }
@@ -62,7 +64,7 @@ export function ObjectInspector() {
   const def         = DEVICE_REGISTRY[selected[0].type];
   const count       = selected.length;
   const ctx         = buildCtx(selected, updateSelected, moveObjects, toggleLock);
-  const caps        = sharedCapabilities(selected);
+  const features    = sharedFeatures(selected);
 
   const title = allSameType
     ? count === 1 ? def.label : `${count} ${def.label}s`
@@ -80,11 +82,11 @@ export function ObjectInspector() {
         </span>
 
         <div className="flex items-center gap-2">
-          {caps
-            .filter(({ cap }) => cap.headerWidget)
-            .map(({ cap, config }) => {
-              const Widget = cap.headerWidget!;
-              return <Widget key={cap.type} ctx={ctx} config={config} />;
+          {features
+            .filter(({ feature }) => feature.headerWidget)
+            .map(({ feature, config }) => {
+              const Widget = feature.headerWidget!;
+              return <Widget key={feature.type} ctx={ctx} config={config} />;
             })}
         </div>
       </div>
@@ -104,13 +106,42 @@ export function ObjectInspector() {
       )}
 
       <div className="px-4 flex flex-col gap-1">
-        {caps.map(({ cap, config }) => {
-          const Inspector = cap.Inspector;
-          if (!Inspector) return null;
+        {features
+          .filter((b) => !FEATURE_CATEGORIES.some((c) => c.features.includes(b.feature.type)))
+          .map(({ feature, config }) => {
+            const Inspector = feature.Inspector;
+            if (!Inspector) return null;
+            return (
+              <div key={feature.type}>
+                <Inspector ctx={ctx} config={config} />
+              </div>
+            );
+          })}
+
+        {FEATURE_CATEGORIES.map((cat) => {
+          const catFeatures = features.filter((b) => {
+            if (!cat.features.includes(b.feature.type)) return false;
+            if (b.feature.type === "beam" && !(b.config as { coneAngle?: unknown }).coneAngle) return false;
+            return true;
+          });
+          if (catFeatures.length === 0) return null;
           return (
-            <div key={cap.type}>
-              <Inspector ctx={ctx} config={config} />
-            </div>
+            <CategorySection
+              key={cat.key}
+              label={cat.label}
+              locked={ctx.isLocked(`cat:${cat.key}`)}
+              onToggleLock={() => ctx.toggleLock(`cat:${cat.key}`)}
+            >
+              {catFeatures.map(({ feature, config }) => {
+                const Inspector = feature.Inspector;
+                if (!Inspector) return null;
+                return (
+                  <div key={feature.type}>
+                    <Inspector ctx={ctx} config={config} />
+                  </div>
+                );
+              })}
+            </CategorySection>
           );
         })}
       </div>

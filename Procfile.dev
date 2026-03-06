@@ -1,2 +1,2 @@
-server: cargo run -p dlc-server
-web: cd web-ui && npm run dev
+server: DLC_DMX_OUTPUT=enttec_pro cargo run -p dlc-server
+web: cd web-ui && mise exec -- npm run dev

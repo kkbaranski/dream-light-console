@@ -2,54 +2,54 @@
  * Central device registry — the single source of truth for all placeable objects.
  *
  * To add a new device type:
- *   1. Add an entry below. Capabilities are plain object fields — presence means
- *      the device has that capability. Absence means it doesn't.
+ *   1. Add an entry below. Features are plain object fields — presence means
+ *      the device has that feature. Absence means it doesn't.
  *   2. Place the GLB at the corresponding public path.
  *
- * DMX offsets are 0-based. Capabilities without a `dmx` field are manual-only (no DMX output).
+ * DMX offsets are 0-based. Features without a `dmx` field are manual-only (no DMX output).
  */
 
-import type {BoundCapability, CapabilityDef} from "./capability";
+import type {BoundFeature, FeatureDef} from "./feature";
 import type {
     BeamConfig,
     ColorWheelConfig,
     DimmerConfig,
     DmxConfig,
     DualWhiteConfig,
+    GoboWheelConfig,
     InnerPoleConfig,
     NameConfig,
     PanConfig,
-    PowerConfig,
+    PtSpeedConfig,
     RgbColorConfig,
     TiltConfig,
     TransformConfig,
-}                                            from "./capabilities";
+}                                            from "./features";
 import {
     beam,
     colorWheel,
     dimmer,
     dmx,
     dualWhite,
+    goboWheel,
     innerPole,
     name,
     pan,
-    power,
+    ptSpeed,
     rgbColor,
     tilt,
     transform,
-}                                            from "./capabilities";
+}                                            from "./features";
 import {
     validateMode
 }                                            from "./validation";
 
-// ── Fixture mode ──────────────────────────────────────────────────────────────
-// Each optional field corresponds to a capability. Presence = device has it.
+// Each optional field corresponds to a feature. Presence = device has it.
 
 export interface FixtureMode {
     readonly label: string;
     readonly name?: NameConfig;
     readonly dmx?: DmxConfig;
-    readonly power?: PowerConfig;
     readonly transform?: TransformConfig;
     readonly dimmer?: DimmerConfig;
     readonly pan?: PanConfig;
@@ -57,6 +57,8 @@ export interface FixtureMode {
     readonly rgbColor?: RgbColorConfig;
     readonly colorWheel?: ColorWheelConfig;
     readonly dualWhite?: DualWhiteConfig;
+    readonly ptSpeed?: PtSpeedConfig;
+    readonly goboWheel?: GoboWheelConfig;
     readonly innerPole?: InnerPoleConfig;
     readonly beam?: BeamConfig;
 }
@@ -72,8 +74,6 @@ export interface DeviceDef {
     readonly defaultMode: string;
 }
 
-// ── Registry ──────────────────────────────────────────────────────────────────
-
 export const DEVICE_REGISTRY = {
     moving_head: {
         label: "Moving Head",
@@ -82,19 +82,50 @@ export const DEVICE_REGISTRY = {
         supportsGroupDrag: true,
         supportsAdditiveSelect: true,
         supportsCopyPaste: true,
-        defaultMode: "sevenChannel",
+        defaultMode: "twelveChannel",
         modes: {
-            sevenChannel: {
-                label: "7 Channel",
+            twelveChannel: {
+                label: "12 Channel",
                 name: {defaultName: "Moving Head"},
                 dmx: {},
-                power: {},
                 transform: {},
-                dimmer: {dmx: {offset: 0}},
-                pan: {dmx: {offset: 1}, modelNode: "Yoke", totalDegrees: 540},
-                tilt: {dmx: {offset: 2}, modelNode: "Head", startDegrees: 0, totalDegrees: 359},
-                rgbColor: {dmx: {red: 3, green: 4, blue: 5}, defaultColor: "#ffffff"},
-                beam: {dmx: {offset: 6}, glowMaterialName: "Glow", lensOffset: 0.06, lensRadius: 0.08, coneAngle: {min: 1, max: 60, default: 15}, coneOpacity: 0.35},
+                pan: {dmx: {coarse: 0, fine: 1}, modelNode: "Yoke", totalDegrees: 540},
+                tilt: {dmx: {coarse: 2, fine: 3}, modelNode: "Head", startDegrees: 0, totalDegrees: 360},
+                ptSpeed: {dmx: {offset: 4}},
+                dimmer: {dmx: {offset: 5}},
+                // offset 6: strobe (not implemented yet)
+                colorWheel: {
+                    dmx: {offset: 7},
+                    colors: [
+                        {name: "White", hex: "#ffffff", dmxStart: 0, dmxEnd: 19},
+                        {name: "Red", hex: "#ff0000", dmxStart: 20, dmxEnd: 39},
+                        {name: "Orange", hex: "#ff8000", dmxStart: 40, dmxEnd: 59},
+                        {name: "Yellow", hex: "#ffff00", dmxStart: 60, dmxEnd: 79},
+                        {name: "Green", hex: "#00ff00", dmxStart: 80, dmxEnd: 99},
+                        {name: "Blue", hex: "#0000ff", dmxStart: 100, dmxEnd: 119},
+                        {name: "Pink", hex: "#ff69b4", dmxStart: 120, dmxEnd: 139},
+                        {name: "Sea", hex: "#00cba9", dmxStart: 140, dmxEnd: 159},
+                    ],
+                    defaultIndex: 0,
+                },
+                goboWheel: {
+                    dmx: {offset: 8},
+                    gobos: [
+                        {name: "None", dmxStart: 0, dmxEnd: 9},
+                        {name: "Gobo 1", dmxStart: 10, dmxEnd: 19},
+                        {name: "Gobo 2", dmxStart: 20, dmxEnd: 29},
+                        {name: "Gobo 3", dmxStart: 30, dmxEnd: 39},
+                        {name: "Gobo 4", dmxStart: 40, dmxEnd: 49},
+                        {name: "Gobo 5", dmxStart: 50, dmxEnd: 59},
+                        {name: "Gobo 6", dmxStart: 60, dmxEnd: 69},
+                        {name: "Gobo 7", dmxStart: 70, dmxEnd: 79},
+                    ],
+                    defaultIndex: 0,
+                },
+                // offset 9: prism (not implemented yet)
+                // offset 10: empty
+                // offset 11: reset (not implemented yet)
+                beam: {glowMaterialName: "Lens", lensPosition: [0, -0.24, 0.38], beamLocalDir: [0, -0.56, 0.83], lensRadius: 0.06, fixedConeAngleDeg: 12, coneOpacity: 0.35},
             },
         },
     },
@@ -112,12 +143,11 @@ export const DEVICE_REGISTRY = {
                 label: "7 Channel",
                 name: {defaultName: "Gobo"},
                 dmx: {},
-                power: {},
                 transform: {},
                 dimmer: {dmx: {offset: 0}},
                 pan: {dmx: {offset: 1}, modelNode: "Yoke", totalDegrees: 540},
                 tilt: {dmx: {offset: 2}, modelNode: "Head", startDegrees: 0, totalDegrees: 359},
-                rgbColor: {dmx: {red: 3, green: 4, blue: 5}, defaultColor: "#ffffff"},
+                rgbColor: {dmx: {red: 3, green: 4, blue: 5}, defaultColor: "#000000"},
                 beam: {dmx: {offset: 6}, glowMaterialName: "Glow", lensOffset: 0.06, lensRadius: 0.08, coneAngle: {min: 1, max: 60, default: 15}, coneOpacity: 0.35},
             },
         },
@@ -136,7 +166,6 @@ export const DEVICE_REGISTRY = {
                 label: "4 Channel",
                 name: {defaultName: "Fresnel"},
                 dmx: {},
-                power: {},
                 transform: {},
                 dimmer: {dmx: {offset: 0}},
                 dualWhite: {dmx: {warm: 1, cold: 2}, warmColorHex: "#fff6e8", coldColorHex: "#e9e8ff"},
@@ -212,46 +241,43 @@ export const DEVICE_REGISTRY = {
 /** Derived from registry keys — never maintain this manually. */
 export type SceneObjectType = keyof typeof DEVICE_REGISTRY;
 
-// ── Capability resolution ──────────────────────────────────────────────────────
-// Ordered list mapping FixtureMode keys → CapabilityDef objects.
-// This order determines rendering order in the inspector.
-
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
-const CAPABILITY_MAP: ReadonlyArray<{ key: keyof Omit<FixtureMode, "label">; cap: CapabilityDef<any> }> = [
-    {key: "name", cap: name},
-    {key: "dmx", cap: dmx},
-    {key: "power", cap: power},
-    {key: "transform", cap: transform},
-    {key: "dimmer", cap: dimmer},
-    {key: "pan", cap: pan},
-    {key: "tilt", cap: tilt},
-    {key: "rgbColor", cap: rgbColor},
-    {key: "colorWheel", cap: colorWheel},
-    {key: "dualWhite", cap: dualWhite},
-    {key: "innerPole", cap: innerPole},
-    {key: "beam", cap: beam},
+const FEATURE_MAP: ReadonlyArray<{ key: keyof Omit<FixtureMode, "label">; feature: FeatureDef<any> }> = [
+    {key: "name", feature: name},
+    {key: "dmx", feature: dmx},
+    {key: "transform", feature: transform},
+    {key: "dimmer", feature: dimmer},
+    {key: "pan", feature: pan},
+    {key: "tilt", feature: tilt},
+    {key: "rgbColor", feature: rgbColor},
+    {key: "colorWheel", feature: colorWheel},
+    {key: "dualWhite", feature: dualWhite},
+    {key: "ptSpeed", feature: ptSpeed},
+    {key: "goboWheel", feature: goboWheel},
+    {key: "innerPole", feature: innerPole},
+    {key: "beam", feature: beam},
 ];
 
-// WeakMap cache: each FixtureMode object gets its BoundCapability[] computed once,
+// WeakMap cache: each FixtureMode object gets its BoundFeature[] computed once,
 // giving stable array references (important for React useMemo dependency checks).
-const _capsCache = new WeakMap<object, ReadonlyArray<BoundCapability>>();
+const _featuresCache = new WeakMap<object, ReadonlyArray<BoundFeature>>();
 
-/** Returns the active capability set for an object given its current mode key. */
-export function activeCapabilities(
+/** Returns the active feature set for an object given its current mode key. */
+export function activeFeatures(
     def: DeviceDef,
     modeKey: string,
-): ReadonlyArray<BoundCapability> {
+): ReadonlyArray<BoundFeature> {
     const mode = def.modes[modeKey] ?? Object.values(def.modes)[0];
-    const cached = _capsCache.get(mode as object);
+    const cached = _featuresCache.get(mode as object);
     if (cached !== undefined) {
         return cached;
     }
-    const caps: BoundCapability[] = CAPABILITY_MAP.flatMap(({key, cap}) => {
+    const features: BoundFeature[] = FEATURE_MAP.flatMap(({key, feature}) => {
         const config = mode[key];
-        return config !== undefined ? [{cap, config}] : [];
+        return config !== undefined ? [{feature, config}] : [];
     });
-    _capsCache.set(mode as object, caps);
-    return caps;
+    _featuresCache.set(mode as object, features);
+    return features;
 }
 
 /** Returns true when the device emits light in at least one of its modes. */
@@ -262,6 +288,6 @@ export function hasBeam(def: DeviceDef): boolean {
 // Validate channel layout at module load time (logs errors; does not throw).
 for (const def of Object.values(DEVICE_REGISTRY)) {
     for (const [modeKey, mode] of Object.entries(def.modes)) {
-        validateMode(def.label, mode.label, activeCapabilities(def, modeKey));
+        validateMode(def.label, mode.label, activeFeatures(def, modeKey));
     }
 }

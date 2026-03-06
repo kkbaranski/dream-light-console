@@ -1,7 +1,7 @@
-import { encodingWidth, type BoundCapability } from "./capability";
+import { encodingWidth, type BoundFeature } from "./feature";
 
-function occupiedChannels(bound: BoundCapability): Array<{ absoluteOffset: number; label: string }> {
-  const channels = bound.cap.dmxChannels?.(bound.config) ?? [];
+function occupiedChannels(bound: BoundFeature): Array<{ absoluteOffset: number; label: string }> {
+  const channels = bound.feature.dmxChannels?.(bound.config) ?? [];
   return channels.flatMap((channel) =>
     Array.from({ length: encodingWidth(channel.encoding) }, (_, index) => ({
       absoluteOffset: channel.offset + index,
@@ -10,11 +10,11 @@ function occupiedChannels(bound: BoundCapability): Array<{ absoluteOffset: numbe
   );
 }
 
-function detectCollisions(capabilities: ReadonlyArray<BoundCapability>): string[] {
+function detectCollisions(features: ReadonlyArray<BoundFeature>): string[] {
   const claimedByOffset = new Map<number, string>();
   const errors: string[] = [];
 
-  for (const bound of capabilities) {
+  for (const bound of features) {
     for (const { absoluteOffset, label } of occupiedChannels(bound)) {
       const existing = claimedByOffset.get(absoluteOffset);
       if (existing !== undefined) {
@@ -31,9 +31,9 @@ function detectCollisions(capabilities: ReadonlyArray<BoundCapability>): string[
 export function validateMode(
   deviceLabel: string,
   modeLabel: string,
-  capabilities: ReadonlyArray<BoundCapability>,
+  features: ReadonlyArray<BoundFeature>,
 ): void {
-  const errors = detectCollisions(capabilities);
+  const errors = detectCollisions(features);
   if (errors.length > 0) {
     console.error(
       `DMX validation failed for "${deviceLabel}" / "${modeLabel}":\n` +

@@ -1,0 +1,62 @@
+{
+  "id": "fresnel",
+  "label": "Fresnel",
+  "modelPath": "/models/lights/fresnel.glb",
+  "targetHeight": 1,
+  "supportsGroupDrag": true,
+  "supportsAdditiveSelect": true,
+  "supportsCopyPaste": true,
+  "defaultMode": "fourChannel",
+  "modes": {
+    "fourChannel": {
+      "label": "4 Channel",
+      "name": {
+        "defaultName": "Fresnel"
+      },
+      "dmx": {},
+      "power": {},
+      "transform": {},
+      "dimmer": {
+        "dmx": {
+          "offset": 0
+        }
+      },
+      "dualWhite": {
+        "dmx": {
+          "warm": 1,
+          "cold": 2
+        },
+        "warmColorHex": "#fff6e8",
+        "coldColorHex": "#e9e8ff"
+      },
+      "tilt": {
+        "modelNode": "Base",
+        "startDegrees": -60,
+        "totalDegrees": 270
+      },
+      "beam": {
+        "dmx": {
+          "offset": 3
+        },
+        "glowMaterialName": "Bulb",
+        "lensRadius": 0.12,
+        "lensPosition": [
+          0,
+          0,
+          -0.7
+        ],
+        "beamLocalDir": [
+          0,
+          0,
+          -1
+        ],
+        "coneAngle": {
+          "min": 5,
+          "max": 70,
+          "default": 25
+        },
+        "coneOpacity": 0.3
+      }
+    }
+  }
+}

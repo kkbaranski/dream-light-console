@@ -7,19 +7,18 @@ use serde::{Deserialize, Serialize};
 use sqlx::FromRow;
 use uuid::Uuid;
 
+use crate::db::{delete_or_not_found, fetch_or_not_found};
 use crate::error::ApiError;
 use crate::state::AppState;
 
 #[derive(Debug, Serialize, Deserialize, FromRow)]
 pub struct Stage {
     pub id: String,
-    pub show_id: String,
     pub name: String,
-    pub floor_material_id: String,
-    pub wall_material_id: String,
-    pub floor_tile_size: f64,
-    pub wall_tile_size: f64,
-    pub stage_model_id: Option<String>,
+    pub location_name: String,
+    pub location_address: String,
+    pub dimensions_json: String,
+    pub notes: String,
     pub created_at: String,
     pub updated_at: String,
 }
@@ -27,48 +26,33 @@ pub struct Stage {
 #[derive(Deserialize)]
 pub struct CreateStage {
     pub name: String,
-    #[serde(default = "default_floor_material")]
-    pub floor_material_id: String,
-    #[serde(default = "default_wall_material")]
-    pub wall_material_id: String,
-    #[serde(default = "default_tile_size")]
-    pub floor_tile_size: f64,
-    #[serde(default = "default_tile_size")]
-    pub wall_tile_size: f64,
-    pub stage_model_id: Option<String>,
+    #[serde(default)]
+    pub location_name: String,
+    #[serde(default)]
+    pub location_address: String,
+    #[serde(default = "default_dimensions")]
+    pub dimensions_json: String,
+    #[serde(default)]
+    pub notes: String,
 }
 
-fn default_floor_material() -> String {
-    "floor-pavement".to_string()
-}
-fn default_wall_material() -> String {
-    "wall-white".to_string()
-}
-fn default_tile_size() -> f64 {
-    1.0
-}
+fn default_dimensions() -> String { "{}".to_string() }
 
 #[derive(Deserialize)]
 pub struct UpdateStage {
     pub name: Option<String>,
-    pub floor_material_id: Option<String>,
-    pub wall_material_id: Option<String>,
-    pub floor_tile_size: Option<f64>,
-    pub wall_tile_size: Option<f64>,
-    pub stage_model_id: Option<Option<String>>,
+    pub location_name: Option<String>,
+    pub location_address: Option<String>,
+    pub dimensions_json: Option<String>,
+    pub notes: Option<String>,
 }
 
-const SELECT: &str = "SELECT id, show_id, name, floor_material_id, wall_material_id, floor_tile_size, wall_tile_size, stage_model_id, created_at, updated_at FROM stages";
+const SELECT: &str = "SELECT id, name, location_name, location_address, dimensions_json, notes, created_at, updated_at FROM stages";
 
-pub async fn list(
-    State(state): State<AppState>,
-    Path(show_id): Path<String>,
-) -> Result<Json<Vec<Stage>>, ApiError> {
-    let rows =
-        sqlx::query_as::<_, Stage>(&format!("{SELECT} WHERE show_id = ? ORDER BY created_at"))
-            .bind(&show_id)
-            .fetch_all(&state.db)
-            .await?;
+pub async fn list(State(state): State<AppState>) -> Result<Json<Vec<Stage>>, ApiError> {
+    let rows = sqlx::query_as::<_, Stage>(&format!("{SELECT} ORDER BY created_at"))
+        .fetch_all(&state.db)
+        .await?;
     Ok(Json(rows))
 }
 
@@ -76,31 +60,30 @@ pub async fn get(
     State(state): State<AppState>,
     Path(id): Path<String>,
 ) -> Result<Json<Stage>, ApiError> {
-    let row = sqlx::query_as::<_, Stage>(&format!("{SELECT} WHERE id = ?"))
-        .bind(&id)
-        .fetch_optional(&state.db)
-        .await?
-        .ok_or_else(|| ApiError::not_found("stage not found"))?;
+    let row: Stage = fetch_or_not_found(
+        &format!("{SELECT} WHERE id = ?"),
+        &id,
+        &state.db,
+        "stage",
+    )
+    .await?;
     Ok(Json(row))
 }
 
 pub async fn create(
     State(state): State<AppState>,
-    Path(show_id): Path<String>,
     Json(body): Json<CreateStage>,
 ) -> Result<(StatusCode, Json<Stage>), ApiError> {
     let id = Uuid::new_v4().to_string();
     sqlx::query(
-        "INSERT INTO stages (id, show_id, name, floor_material_id, wall_material_id, floor_tile_size, wall_tile_size, stage_model_id) VALUES (?, ?, ?, ?, ?, ?, ?, ?)",
+        "INSERT INTO stages (id, name, location_name, location_address, dimensions_json, notes) VALUES (?, ?, ?, ?, ?, ?)",
     )
     .bind(&id)
-    .bind(&show_id)
     .bind(&body.name)
-    .bind(&body.floor_material_id)
-    .bind(&body.wall_material_id)
-    .bind(body.floor_tile_size)
-    .bind(body.wall_tile_size)
-    .bind(&body.stage_model_id)
+    .bind(&body.location_name)
+    .bind(&body.location_address)
+    .bind(&body.dimensions_json)
+    .bind(&body.notes)
     .execute(&state.db)
     .await?;
 
@@ -116,31 +99,28 @@ pub async fn update(
     Path(id): Path<String>,
     Json(body): Json<UpdateStage>,
 ) -> Result<Json<Stage>, ApiError> {
-    let current = sqlx::query_as::<_, Stage>(&format!("{SELECT} WHERE id = ?"))
-        .bind(&id)
-        .fetch_optional(&state.db)
-        .await?
-        .ok_or_else(|| ApiError::not_found("stage not found"))?;
+    let current: Stage = fetch_or_not_found(
+        &format!("{SELECT} WHERE id = ?"),
+        &id,
+        &state.db,
+        "stage",
+    )
+    .await?;
 
     let name = body.name.unwrap_or(current.name);
-    let floor_mat = body.floor_material_id.unwrap_or(current.floor_material_id);
-    let wall_mat = body.wall_material_id.unwrap_or(current.wall_material_id);
-    let floor_tile = body.floor_tile_size.unwrap_or(current.floor_tile_size);
-    let wall_tile = body.wall_tile_size.unwrap_or(current.wall_tile_size);
-    let stage_model = match body.stage_model_id {
-        Some(v) => v,
-        None => current.stage_model_id,
-    };
+    let location_name = body.location_name.unwrap_or(current.location_name);
+    let location_address = body.location_address.unwrap_or(current.location_address);
+    let dimensions_json = body.dimensions_json.unwrap_or(current.dimensions_json);
+    let notes = body.notes.unwrap_or(current.notes);
 
     sqlx::query(
-        "UPDATE stages SET name = ?, floor_material_id = ?, wall_material_id = ?, floor_tile_size = ?, wall_tile_size = ?, stage_model_id = ?, updated_at = datetime('now') WHERE id = ?",
+        "UPDATE stages SET name = ?, location_name = ?, location_address = ?, dimensions_json = ?, notes = ?, updated_at = datetime('now') WHERE id = ?",
     )
     .bind(&name)
-    .bind(&floor_mat)
-    .bind(&wall_mat)
-    .bind(floor_tile)
-    .bind(wall_tile)
-    .bind(&stage_model)
+    .bind(&location_name)
+    .bind(&location_address)
+    .bind(&dimensions_json)
+    .bind(&notes)
     .bind(&id)
     .execute(&state.db)
     .await?;
@@ -156,13 +136,7 @@ pub async fn delete(
     State(state): State<AppState>,
     Path(id): Path<String>,
 ) -> Result<StatusCode, ApiError> {
-    let result = sqlx::query("DELETE FROM stages WHERE id = ?")
-        .bind(&id)
-        .execute(&state.db)
-        .await?;
-    if result.rows_affected() == 0 {
-        return Err(ApiError::not_found("stage not found"));
-    }
+    delete_or_not_found("DELETE FROM stages WHERE id = ?", &id, &state.db, "stage").await?;
     Ok(StatusCode::NO_CONTENT)
 }
 
@@ -172,20 +146,15 @@ mod tests {
     use tower::ServiceExt;
 
     use crate::routes;
-    use crate::test_helpers::{body_json, create_show, json_request, spawn_test_state};
+    use crate::test_helpers::{body_json, create_stage, json_request, spawn_test_state};
 
     #[tokio::test]
     async fn list_empty() {
         let state = spawn_test_state().await;
         let app = routes::build_router(state);
-        let show_id = create_show(&app, "Test Show").await;
 
         let resp = app
-            .oneshot(json_request(
-                Method::GET,
-                &format!("/api/shows/{show_id}/stages"),
-                None,
-            ))
+            .oneshot(json_request(Method::GET, "/api/stages", None))
             .await
             .unwrap();
 
@@ -198,14 +167,12 @@ mod tests {
     async fn create_and_get() {
         let state = spawn_test_state().await;
         let app = routes::build_router(state);
-        let show_id = create_show(&app, "Test Show").await;
 
-        // Create with minimal body
         let resp = app
             .clone()
             .oneshot(json_request(
                 Method::POST,
-                &format!("/api/shows/{show_id}/stages"),
+                "/api/stages",
                 Some(r#"{"name":"Main Stage"}"#),
             ))
             .await
@@ -214,150 +181,75 @@ mod tests {
         assert_eq!(resp.status(), StatusCode::CREATED);
         let created = body_json(resp).await;
         assert_eq!(created["name"], "Main Stage");
-        assert_eq!(created["show_id"], show_id);
-        assert_eq!(created["floor_material_id"], "floor-pavement");
-        assert_eq!(created["wall_material_id"], "wall-white");
-        assert_eq!(created["floor_tile_size"], 1.0);
-        assert_eq!(created["wall_tile_size"], 1.0);
-        assert_eq!(created["stage_model_id"], serde_json::Value::Null);
+        assert_eq!(created["location_name"], "");
         let id = created["id"].as_str().unwrap();
 
-        // Get by ID
         let resp = app
             .clone()
             .oneshot(json_request(Method::GET, &format!("/api/stages/{id}"), None))
             .await
             .unwrap();
         assert_eq!(resp.status(), StatusCode::OK);
-        let fetched = body_json(resp).await;
-        assert_eq!(fetched["name"], "Main Stage");
+        assert_eq!(body_json(resp).await["name"], "Main Stage");
 
-        // List
         let resp = app
-            .oneshot(json_request(
-                Method::GET,
-                &format!("/api/shows/{show_id}/stages"),
-                None,
-            ))
+            .oneshot(json_request(Method::GET, "/api/stages", None))
             .await
             .unwrap();
-        let list = body_json(resp).await;
-        assert_eq!(list.as_array().unwrap().len(), 1);
+        assert_eq!(body_json(resp).await.as_array().unwrap().len(), 1);
     }
 
     #[tokio::test]
-    async fn create_with_all_fields() {
+    async fn create_with_location() {
         let state = spawn_test_state().await;
         let app = routes::build_router(state);
-        let show_id = create_show(&app, "Test Show").await;
 
         let resp = app
             .clone()
             .oneshot(json_request(
                 Method::POST,
-                &format!("/api/shows/{show_id}/stages"),
-                Some(r#"{"name":"Custom","floor_material_id":"floor-wood","wall_material_id":"wall-brick","floor_tile_size":2.0,"wall_tile_size":0.5,"stage_model_id":"stage-arena"}"#),
+                "/api/stages",
+                Some(r#"{"name":"Arena","location_name":"City Arena","location_address":"123 Main St"}"#),
             ))
             .await
             .unwrap();
 
         assert_eq!(resp.status(), StatusCode::CREATED);
         let body = body_json(resp).await;
-        assert_eq!(body["floor_material_id"], "floor-wood");
-        assert_eq!(body["wall_material_id"], "wall-brick");
-        assert_eq!(body["floor_tile_size"], 2.0);
-        assert_eq!(body["wall_tile_size"], 0.5);
-        assert_eq!(body["stage_model_id"], "stage-arena");
+        assert_eq!(body["location_name"], "City Arena");
+        assert_eq!(body["location_address"], "123 Main St");
     }
 
     #[tokio::test]
     async fn update_partial() {
         let state = spawn_test_state().await;
         let app = routes::build_router(state);
-        let show_id = create_show(&app, "Test Show").await;
+        let stage_id = create_stage(&app, "Original").await;
 
-        let resp = app
-            .clone()
-            .oneshot(json_request(
-                Method::POST,
-                &format!("/api/shows/{show_id}/stages"),
-                Some(r#"{"name":"Original"}"#),
-            ))
-            .await
-            .unwrap();
-        let created = body_json(resp).await;
-        let id = created["id"].as_str().unwrap();
-
-        // Partial update — only name
         let resp = app
             .clone()
             .oneshot(json_request(
                 Method::PUT,
-                &format!("/api/stages/{id}"),
+                &format!("/api/stages/{stage_id}"),
                 Some(r#"{"name":"Renamed"}"#),
             ))
             .await
             .unwrap();
         assert_eq!(resp.status(), StatusCode::OK);
-        let updated = body_json(resp).await;
-        assert_eq!(updated["name"], "Renamed");
-        assert_eq!(updated["floor_material_id"], "floor-pavement"); // unchanged
-    }
-
-    #[tokio::test]
-    async fn update_materials() {
-        let state = spawn_test_state().await;
-        let app = routes::build_router(state);
-        let show_id = create_show(&app, "Test Show").await;
-
-        let resp = app
-            .clone()
-            .oneshot(json_request(
-                Method::POST,
-                &format!("/api/shows/{show_id}/stages"),
-                Some(r#"{"name":"Stage"}"#),
-            ))
-            .await
-            .unwrap();
-        let id = body_json(resp).await["id"].as_str().unwrap().to_string();
-
-        let resp = app
-            .clone()
-            .oneshot(json_request(
-                Method::PUT,
-                &format!("/api/stages/{id}"),
-                Some(r#"{"floor_material_id":"floor-wood","floor_tile_size":3.0}"#),
-            ))
-            .await
-            .unwrap();
-        let updated = body_json(resp).await;
-        assert_eq!(updated["floor_material_id"], "floor-wood");
-        assert_eq!(updated["floor_tile_size"], 3.0);
-        assert_eq!(updated["name"], "Stage"); // unchanged
+        assert_eq!(body_json(resp).await["name"], "Renamed");
     }
 
     #[tokio::test]
     async fn delete_stage() {
         let state = spawn_test_state().await;
         let app = routes::build_router(state);
-        let show_id = create_show(&app, "Test Show").await;
-
-        let resp = app
-            .clone()
-            .oneshot(json_request(
-                Method::POST,
-                &format!("/api/shows/{show_id}/stages"),
-                Some(r#"{"name":"To Delete"}"#),
-            ))
-            .await
-            .unwrap();
-        let id = body_json(resp).await["id"].as_str().unwrap().to_string();
+        let stage_id = create_stage(&app, "To Delete").await;
 
         let resp = app
             .clone()
             .oneshot(json_request(
                 Method::DELETE,
-                &format!("/api/stages/{id}"),
+                &format!("/api/stages/{stage_id}"),
                 None,
             ))
             .await
@@ -365,7 +257,11 @@ mod tests {
         assert_eq!(resp.status(), StatusCode::NO_CONTENT);
 
         let resp = app
-            .oneshot(json_request(Method::GET, &format!("/api/stages/{id}"), None))
+            .oneshot(json_request(
+                Method::GET,
+                &format!("/api/stages/{stage_id}"),
+                None,
+            ))
             .await
             .unwrap();
         assert_eq!(resp.status(), StatusCode::NOT_FOUND);
@@ -378,45 +274,6 @@ mod tests {
 
         let resp = app
             .oneshot(json_request(Method::GET, "/api/stages/nonexistent", None))
-            .await
-            .unwrap();
-        assert_eq!(resp.status(), StatusCode::NOT_FOUND);
-    }
-
-    #[tokio::test]
-    async fn cascade_delete_with_show() {
-        let state = spawn_test_state().await;
-        let app = routes::build_router(state);
-        let show_id = create_show(&app, "Test Show").await;
-
-        let resp = app
-            .clone()
-            .oneshot(json_request(
-                Method::POST,
-                &format!("/api/shows/{show_id}/stages"),
-                Some(r#"{"name":"Stage"}"#),
-            ))
-            .await
-            .unwrap();
-        let stage_id = body_json(resp).await["id"].as_str().unwrap().to_string();
-
-        // Delete the show
-        app.clone()
-            .oneshot(json_request(
-                Method::DELETE,
-                &format!("/api/shows/{show_id}"),
-                None,
-            ))
-            .await
-            .unwrap();
-
-        // Stage should be gone (cascade)
-        let resp = app
-            .oneshot(json_request(
-                Method::GET,
-                &format!("/api/stages/{stage_id}"),
-                None,
-            ))
             .await
             .unwrap();
         assert_eq!(resp.status(), StatusCode::NOT_FOUND);

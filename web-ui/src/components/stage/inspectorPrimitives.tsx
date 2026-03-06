@@ -1,6 +1,7 @@
 import { useState, useRef, useEffect } from "react";
 import { HexColorPicker } from "react-colorful";
 import { useStageEditorStore } from "../../store/stageEditorStore";
+import { LockClosedIcon, LockOpenIcon, GearIcon } from "../ui/Icons";
 
 // ─── Color Utilities ──────────────────────────────────────────────────────────
 
@@ -27,29 +28,7 @@ export const PRESET_COLORS = [
 // ─── Lock Icon ────────────────────────────────────────────────────────────────
 
 export function LockIcon({ locked }: { locked: boolean }) {
-  return (
-    <svg
-      viewBox="0 0 12 16"
-      width="9"
-      height="12"
-      fill="none"
-      stroke="currentColor"
-      strokeWidth="1.6"
-      strokeLinecap="round"
-      strokeLinejoin="round"
-    >
-      <rect
-        x="1" y="7" width="10" height="8" rx="1.5"
-        fill={locked ? "currentColor" : "none"}
-        stroke={locked ? "none" : "currentColor"}
-        strokeWidth="1.4"
-      />
-      {locked
-        ? <path d="M3 7V5a3 3 0 0 1 6 0v2" />
-        : <path d="M3 7V5a3 3 0 0 1 6 0V3" />
-      }
-    </svg>
-  );
+  return locked ? <LockClosedIcon /> : <LockOpenIcon />;
 }
 
 export function LockButton({
@@ -74,6 +53,22 @@ export function LockButton({
   );
 }
 
+// ─── Gear Button ─────────────────────────────────────────────────────────────
+
+export function GearButton({ open, onClick }: { open?: boolean; onClick: () => void }) {
+  return (
+    <button
+      onClick={onClick}
+      title="Configure"
+      className={`flex-shrink-0 transition-colors p-0.5 rounded ${
+        open ? "text-gray-300" : "text-gray-600 hover:text-gray-400"
+      }`}
+    >
+      <GearIcon />
+    </button>
+  );
+}
+
 // ─── Section Divider ──────────────────────────────────────────────────────────
 
 export function SectionDivider({ label }: { label: string }) {
@@ -87,22 +82,42 @@ export function SectionDivider({ label }: { label: string }) {
   );
 }
 
-// ─── Power Icon ───────────────────────────────────────────────────────────────
+// ─── Category Section ────────────────────────────────────────────────────────
 
-export function PowerIcon() {
+export function CategorySection({
+  label,
+  locked,
+  onToggleLock,
+  defaultOpen = true,
+  children,
+}: {
+  label: string;
+  locked: boolean;
+  onToggleLock: () => void;
+  defaultOpen?: boolean;
+  children: React.ReactNode;
+}) {
+  const [open, setOpen] = useState(defaultOpen);
   return (
-    <svg
-      viewBox="0 0 24 24"
-      width="15"
-      height="15"
-      fill="none"
-      stroke="currentColor"
-      strokeWidth="2.5"
-      strokeLinecap="round"
-    >
-      <path d="M12 2v7" />
-      <path d="M18.4 6.6A9 9 0 1 1 5.6 6.6" />
-    </svg>
+    <div className="mt-4 first:mt-2">
+      <div
+        className="flex items-center gap-2 mb-1.5 cursor-pointer select-none"
+        onClick={() => setOpen(!open)}
+      >
+        <span className="text-xs font-bold uppercase tracking-widest text-blue-400/70">
+          {label}
+        </span>
+        <div className="flex-1 h-px bg-blue-400/20" />
+        <div onClick={(e) => e.stopPropagation()}>
+          <LockButton locked={locked} onToggle={onToggleLock} />
+        </div>
+      </div>
+      {open && (
+        <div className={`pl-2 flex flex-col gap-3 ${locked ? "opacity-40 pointer-events-none" : ""}`}>
+          {children}
+        </div>
+      )}
+    </div>
   );
 }
 
@@ -212,6 +227,31 @@ export function DraggableField({
   );
 }
 
+// ─── Channel Input ───────────────────────────────────────────────────────────
+
+export function ChannelInput({
+  channel,
+  onChange,
+}: {
+  channel: number;
+  onChange?: (ch: number) => void;
+}) {
+  return (
+    <span className="inline-flex items-center gap-0.5 flex-shrink-0">
+      <span className="text-[10px] text-gray-600">Ch</span>
+      <input
+        type="number"
+        min={1}
+        max={512}
+        value={channel}
+        onChange={(e) => onChange?.(Math.max(1, Number(e.target.value) || 1))}
+        readOnly={!onChange}
+        className="w-7 bg-gray-800/60 text-[10px] font-mono text-gray-500 rounded px-0.5 py-0 border border-gray-700/50 outline-none focus:border-blue-500/50 text-center [appearance:textfield] [&::-webkit-inner-spin-button]:appearance-none [&::-webkit-outer-spin-button]:appearance-none"
+      />
+    </span>
+  );
+}
+
 // ─── Value Slider ─────────────────────────────────────────────────────────────
 
 export function ValueSlider({
@@ -225,6 +265,9 @@ export function ValueSlider({
   locked = false,
   onToggleLock,
   onChange,
+  channel,
+  onChannelChange,
+  headerExtra,
 }: {
   label: string;
   value: number;
@@ -236,14 +279,21 @@ export function ValueSlider({
   locked?: boolean;
   onToggleLock?: () => void;
   onChange: (value: number) => void;
+  channel?: number;
+  onChannelChange?: (ch: number) => void;
+  headerExtra?: React.ReactNode;
 }) {
   return (
     <div className="flex flex-col gap-0.5">
       <div className="flex justify-between items-center px-0.5">
-        <span className="text-xs text-gray-500">{label}</span>
+        <div className="flex items-center gap-1.5">
+          {channel != null && <ChannelInput channel={channel} onChange={onChannelChange} />}
+          <span className="text-xs font-medium text-gray-400">{label}</span>
+          {headerExtra}
+        </div>
         <div className="flex items-center gap-1.5">
           <span className={`text-xs font-mono ${isMixed || locked ? "text-gray-600 italic" : "text-gray-400"}`}>
-            {isMixed ? "—" : unit ? `${value}${unit}` : value}
+            {isMixed ? "—" : `${unit ? `${value}${unit}` : value} (${(value / max * 100).toFixed(1)}%)`}
           </span>
           {onToggleLock && <LockButton locked={locked} onToggle={onToggleLock} />}
         </div>
@@ -260,6 +310,173 @@ export function ValueSlider({
         onChange={(event) => onChange(Number(event.target.value))}
         className={`w-full accent-blue-500 ${isMixed || locked ? "opacity-40" : ""} ${locked ? "cursor-not-allowed" : ""}`}
       />
+    </div>
+  );
+}
+
+// ─── 16-Bit Slider (Unfoldable Coarse/Fine) ─────────────────────────────────
+
+export function Value16BitSlider({
+  label,
+  value,
+  isMixed = false,
+  locked = false,
+  onToggleLock,
+  onChange,
+  coarseChannel,
+  fineChannel,
+  onCoarseChannelChange,
+  onFineChannelChange,
+  lockedCoarse = false,
+  lockedFine = false,
+  onToggleCoarseLock,
+  onToggleFineLock,
+  headerExtra,
+}: {
+  label: string;
+  value: number;
+  isMixed?: boolean;
+  locked?: boolean;
+  onToggleLock?: () => void;
+  onChange: (value: number) => void;
+  coarseChannel?: number;
+  fineChannel?: number;
+  onCoarseChannelChange?: (ch: number) => void;
+  onFineChannelChange?: (ch: number) => void;
+  lockedCoarse?: boolean;
+  lockedFine?: boolean;
+  onToggleCoarseLock?: () => void;
+  onToggleFineLock?: () => void;
+  headerExtra?: React.ReactNode;
+}) {
+  const [expanded, setExpanded] = useState(false);
+
+  const coarse = (value >> 8) & 0xff;
+  const fine = value & 0xff;
+
+  // Both coarse+fine locked behaves like master locked
+  const effectivelyLocked = locked || (lockedCoarse && lockedFine);
+  const coarseDisabled = effectivelyLocked || lockedCoarse;
+  const fineDisabled = effectivelyLocked || lockedFine;
+
+  function handleMasterChange(raw: number) {
+    if (lockedCoarse) {
+      // Keep coarse fixed, only fine part changes
+      const newFine = Math.max(0, Math.min(255, raw - (coarse << 8)));
+      onChange((coarse << 8) | newFine);
+    } else if (lockedFine) {
+      // Keep fine fixed, snap to nearest coarse step
+      const newCoarse = Math.max(0, Math.min(255, Math.round((raw - fine) / 256)));
+      onChange((newCoarse << 8) | fine);
+    } else {
+      onChange(raw);
+    }
+  }
+
+  function handleCoarseChange(c: number) {
+    onChange((c << 8) | fine);
+  }
+
+  function handleFineChange(f: number) {
+    onChange((coarse << 8) | f);
+  }
+
+  return (
+    <div className="flex flex-col gap-0.5">
+      {/* Combined slider header */}
+      <div className="flex justify-between items-center px-0.5">
+        <div className="flex items-center gap-1">
+          <button
+            onClick={() => setExpanded(!expanded)}
+            className="text-gray-600 hover:text-gray-400 transition-colors text-[10px] leading-none w-3"
+          >
+            {expanded ? "\u25BC" : "\u25B6"}
+          </button>
+          <span className="text-xs font-medium text-gray-400">{label}</span>
+          {headerExtra}
+        </div>
+        <div className="flex items-center gap-1.5">
+          <span className={`text-xs font-mono ${isMixed || effectivelyLocked ? "text-gray-600 italic" : "text-gray-400"}`}>
+            {isMixed ? "—" : `${value} (${(value / 65535 * 100).toFixed(1)}%)`}
+          </span>
+          {onToggleLock && <LockButton locked={locked} onToggle={onToggleLock} />}
+        </div>
+      </div>
+
+      {/* Combined range 0-65535 */}
+      <input
+        type="range"
+        min={0}
+        max={65535}
+        step={1}
+        value={value}
+        disabled={effectivelyLocked}
+        onPointerDown={() => useStageEditorStore.getState()._pauseHistory()}
+        onPointerUp={() => useStageEditorStore.getState()._resumeHistory()}
+        onChange={(e) => handleMasterChange(Number(e.target.value))}
+        className={`w-full accent-blue-500 ${isMixed || effectivelyLocked ? "opacity-40" : ""} ${effectivelyLocked ? "cursor-not-allowed" : ""}`}
+      />
+
+      {/* Coarse / Fine sub-sliders */}
+      {expanded && (
+        <div className="ml-1.5 pl-2.5 border-l border-gray-800 flex flex-col gap-1 mt-0.5 pb-1">
+          {/* Coarse */}
+          <div className="flex flex-col gap-0.5">
+            <div className="flex justify-between items-center px-0.5">
+              <div className="flex items-center gap-1.5">
+                {coarseChannel != null && <ChannelInput channel={coarseChannel} onChange={onCoarseChannelChange} />}
+                <span className="text-[11px] text-gray-500">Coarse</span>
+              </div>
+              <div className="flex items-center gap-1">
+                <span className={`text-[11px] font-mono ${coarseDisabled ? "text-gray-600" : "text-gray-400"}`}>
+                  {isMixed ? "—" : `${coarse} (${(coarse / 255 * 100).toFixed(1)}%)`}
+                </span>
+                {onToggleCoarseLock && <LockButton locked={lockedCoarse} onToggle={onToggleCoarseLock} />}
+              </div>
+            </div>
+            <input
+              type="range"
+              min={0}
+              max={255}
+              step={1}
+              value={coarse}
+              disabled={coarseDisabled}
+              onPointerDown={() => useStageEditorStore.getState()._pauseHistory()}
+              onPointerUp={() => useStageEditorStore.getState()._resumeHistory()}
+              onChange={(e) => handleCoarseChange(Number(e.target.value))}
+              className={`w-full accent-blue-500 ${coarseDisabled ? "opacity-40 cursor-not-allowed" : ""}`}
+            />
+          </div>
+
+          {/* Fine */}
+          <div className="flex flex-col gap-0.5">
+            <div className="flex justify-between items-center px-0.5">
+              <div className="flex items-center gap-1.5">
+                {fineChannel != null && <ChannelInput channel={fineChannel} onChange={onFineChannelChange} />}
+                <span className="text-[11px] text-gray-500">Fine</span>
+              </div>
+              <div className="flex items-center gap-1">
+                <span className={`text-[11px] font-mono ${fineDisabled ? "text-gray-600" : "text-gray-400"}`}>
+                  {isMixed ? "—" : `${fine} (${(fine / 255 * 100).toFixed(1)}%)`}
+                </span>
+                {onToggleFineLock && <LockButton locked={lockedFine} onToggle={onToggleFineLock} />}
+              </div>
+            </div>
+            <input
+              type="range"
+              min={0}
+              max={255}
+              step={1}
+              value={fine}
+              disabled={fineDisabled}
+              onPointerDown={() => useStageEditorStore.getState()._pauseHistory()}
+              onPointerUp={() => useStageEditorStore.getState()._resumeHistory()}
+              onChange={(e) => handleFineChange(Number(e.target.value))}
+              className={`w-full accent-blue-500 ${fineDisabled ? "opacity-40 cursor-not-allowed" : ""}`}
+            />
+          </div>
+        </div>
+      )}
     </div>
   );
 }

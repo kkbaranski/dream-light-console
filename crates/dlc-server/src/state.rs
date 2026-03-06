@@ -1,3 +1,4 @@
+use std::collections::HashMap;
 use std::sync::mpsc;
 use std::sync::Arc;
 
@@ -8,6 +9,7 @@ use tokio::sync::broadcast;
 
 use crate::config::ServerConfig;
 use crate::cue_executor::CueExecutor;
+use crate::fixture_types::FixtureTypeDef;
 
 #[derive(Clone)]
 pub struct AppState {
@@ -17,6 +19,7 @@ pub struct AppState {
     pub engine: Arc<EngineHandle>,
     pub ws_broadcast: broadcast::Sender<WsBroadcast>,
     pub cue_executor: CueExecutor,
+    pub fixture_types: Arc<HashMap<String, FixtureTypeDef>>,
 }
 
 #[derive(Debug, Clone)]
