@@ -17,6 +17,7 @@ import { WALL_Z } from "../../../components/stage/sceneConstants";
 import type { RgbColorConfig } from "../color/rgbColor";
 import type { ColorWheelConfig } from "../color/colorWheel";
 import type { DualWhiteConfig } from "../color/dualWhite";
+import type { GoboWheelConfig } from "../gobo/goboWheel";
 import type { PanConfig } from "../panTilt/pan";
 import type { TiltConfig } from "../panTilt/tilt";
 
@@ -61,6 +62,23 @@ export function resolveBeamColor(
   }
 
   return "#ffffff";
+}
+
+// ── Gobo texture resolution ──────────────────────────────────────────────────
+
+export function resolveGoboTexturePath(
+  obj: FeatureObject,
+  boundFeatures: ReadonlyArray<BoundFeature>,
+): string | null {
+  for (const { feature, config } of boundFeatures) {
+    if (feature.type === "goboWheel") {
+      const cfg = config as GoboWheelConfig;
+      const raw = readField<number>(obj, "goboWheel", cfg.gobos[cfg.defaultIndex].dmxStart);
+      const slot = cfg.gobos.find(g => raw >= g.dmxStart && raw <= g.dmxEnd);
+      return slot?.texturePath ?? null;
+    }
+  }
+  return null;
 }
 
 // ── Beam feature definition ───────────────────────────────────────────────────
@@ -255,6 +273,39 @@ export function BeamRenderer({ obj, config, originNode, boundFeatures }: BeamRen
   }, [beamDirX, beamDirY, beamDirZ]);
 
   const spotlightLocalPos = config.lensPosition ?? ([0, -(config.lensOffset ?? 0), 0] as const);
+
+  // ── Gobo texture projection ──────────────────────────────────────────────
+  const goboTexPath = resolveGoboTexturePath(obj, boundFeatures);
+  const goboTexRef = useRef<THREE.Texture | null>(null);
+
+  useEffect(() => {
+    const spot = spotRef.current;
+    if (!spot) return;
+
+    if (!goboTexPath) {
+      spot.map = null;
+      return;
+    }
+
+    const loader = new THREE.TextureLoader();
+    let cancelled = false;
+
+    loader.load(goboTexPath, (tex) => {
+      if (cancelled) { tex.dispose(); return; }
+      if (goboTexRef.current) goboTexRef.current.dispose();
+      goboTexRef.current = tex;
+      spot.map = tex;
+    });
+
+    return () => {
+      cancelled = true;
+      if (goboTexRef.current) {
+        goboTexRef.current.dispose();
+        goboTexRef.current = null;
+      }
+      if (spot) spot.map = null;
+    };
+  }, [goboTexPath]);
 
   useFrame(() => {
     if (!originNode || !spotGroupRef.current) return;
