@@ -169,7 +169,7 @@ async fn main() -> Result<()> {
     let (ws_broadcast, _) = tokio::sync::broadcast::channel(WS_BROADCAST_CAPACITY);
 
     let (tap_tx, tap_rx) = tokio::sync::mpsc::channel(ENGINE_TAP_CAPACITY);
-    let output = Box::new(TapOutput::new(output, tap_tx));
+    let output = Box::new(TapOutput::new(output, tap_tx.clone()));
 
     let engine_handle = EngineHandle::start(output, &dmx_label);
     let engine_tx = engine_handle.sender();
@@ -189,6 +189,7 @@ async fn main() -> Result<()> {
         db,
         engine_tx,
         engine,
+        tap_tx,
         ws_broadcast,
         cue_executor,
         fixture_types,

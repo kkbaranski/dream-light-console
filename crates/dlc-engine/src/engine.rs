@@ -21,7 +21,6 @@ pub struct Engine {
     interpolations: HashMap<u16, InterpolationState>,
     output: Box<dyn DmxOutput>,
     swap_slot: Arc<Mutex<Option<Box<dyn DmxOutput>>>>,
-    output_label: Arc<Mutex<String>>,
     command_rx: mpsc::Receiver<EngineCommand>,
     tick_interval: Duration,
     tick_count: u64,
@@ -33,7 +32,6 @@ impl Engine {
     pub fn new(
         output: Box<dyn DmxOutput>,
         swap_slot: Arc<Mutex<Option<Box<dyn DmxOutput>>>>,
-        output_label: Arc<Mutex<String>>,
         command_rx: mpsc::Receiver<EngineCommand>,
     ) -> Self {
         Self {
@@ -41,7 +39,6 @@ impl Engine {
             interpolations: HashMap::new(),
             output,
             swap_slot,
-            output_label,
             command_rx,
             tick_interval: Duration::from_secs_f64(1.0 / ENGINE_HZ as f64),
             tick_count: 0,
@@ -116,9 +113,6 @@ impl Engine {
             if let Ok(mut slot) = self.swap_slot.try_lock() {
                 if let Some(new_output) = slot.take() {
                     tracing::info!("DMX output swapped to '{}'", new_output.label());
-                    if let Ok(mut label) = self.output_label.try_lock() {
-                        *label = new_output.label().to_string();
-                    }
                     self.output = new_output;
                 }
             }
@@ -200,12 +194,11 @@ impl EngineHandle {
         let output_label = Arc::new(Mutex::new(label.to_string()));
 
         let swap_slot_clone = swap_slot.clone();
-        let output_label_clone = output_label.clone();
 
         let thread = std::thread::Builder::new()
             .name("dlc-engine".into())
             .spawn(move || {
-                let mut engine = Engine::new(output, swap_slot_clone, output_label_clone, command_rx);
+                let mut engine = Engine::new(output, swap_slot_clone, command_rx);
                 engine.run();
             })
             .expect("failed to spawn engine thread");
@@ -471,7 +464,6 @@ mod tests {
             let mut engine = Engine::new(
                 Box::new(output),
                 Arc::new(Mutex::new(None)),
-                Arc::new(Mutex::new("mock".to_string())),
                 rx,
             );
             engine.run();
@@ -507,7 +499,6 @@ mod tests {
             let mut engine = Engine::new(
                 Box::new(output),
                 Arc::new(Mutex::new(None)),
-                Arc::new(Mutex::new("mock".to_string())),
                 rx,
             );
             engine.run();

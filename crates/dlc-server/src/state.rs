@@ -17,6 +17,7 @@ pub struct AppState {
     pub db: SqlitePool,
     pub engine_tx: mpsc::SyncSender<EngineCommand>,
     pub engine: Arc<EngineHandle>,
+    pub tap_tx: tokio::sync::mpsc::Sender<dlc_engine::TapFrame>,
     pub ws_broadcast: broadcast::Sender<WsBroadcast>,
     pub cue_executor: CueExecutor,
     pub fixture_types: Arc<HashMap<String, FixtureTypeDef>>,

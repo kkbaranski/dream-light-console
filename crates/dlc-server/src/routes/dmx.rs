@@ -44,53 +44,47 @@ pub async fn reconnect(
     State(state): State<AppState>,
 ) -> Result<Json<ReconnectResponse>, ApiError> {
     let config = &state.config;
-    match config.dmx_output_type.as_str() {
-        "enttec_pro" => {
-            match crate::try_open_enttec_pro(config) {
-                Ok(output) => {
-                    let (tap_tx, _) = tokio::sync::mpsc::channel(64);
-                    let tap = dlc_engine::TapOutput::new(Box::new(output), tap_tx);
-                    state.engine.swap_output(Box::new(tap), "enttec_pro");
-                    Ok(Json(ReconnectResponse { dmx_output: "enttec_pro".to_string() }))
-                }
-                Err(e) => {
-                    Err(ApiError::Internal(format!("ENTTEC Pro not found: {e}")))
-                }
+
+    // Release the current output so hardware resources (serial ports) are freed.
+    // Wrap NullOutput in TapOutput so the relay task keeps its channel.
+    let null_tap = dlc_engine::TapOutput::new(
+        Box::new(dlc_engine::NullOutput),
+        state.tap_tx.clone(),
+    );
+    state.engine.swap_output(Box::new(null_tap), "none");
+
+    // Wait for the engine to pick up the swap and drop the old output (~2 ticks at 44Hz).
+    tokio::time::sleep(std::time::Duration::from_millis(60)).await;
+
+    let result: Result<(Box<dyn dlc_engine::DmxOutput>, String), String> =
+        match config.dmx_output_type.as_str() {
+            "enttec_pro" => crate::try_open_enttec_pro(config)
+                .map(|o| (Box::new(o) as Box<dyn dlc_engine::DmxOutput>, "enttec_pro".to_string()))
+                .map_err(|e| format!("ENTTEC Pro: {e}")),
+            "artnet" => {
+                let r = match &config.dmx_target_ip {
+                    Some(ip) => match ip.parse::<std::net::IpAddr>() {
+                        Ok(addr) => dlc_engine::ArtNetOutput::unicast(addr),
+                        Err(_) => return Err(ApiError::bad_request(format!("invalid IP: {ip}"))),
+                    },
+                    None => dlc_engine::ArtNetOutput::broadcast(),
+                };
+                r.map(|o| (Box::new(o) as Box<dyn dlc_engine::DmxOutput>, "artnet".to_string()))
+                    .map_err(|e| format!("Art-Net: {e}"))
             }
+            "sacn" => dlc_engine::SacnOutput::new(config.sacn_priority)
+                .map(|o| (Box::new(o) as Box<dyn dlc_engine::DmxOutput>, "sacn".to_string()))
+                .map_err(|e| format!("sACN: {e}")),
+            other => Err(format!("reconnect not supported for output type '{other}'")),
+        };
+
+    match result {
+        Ok((output, label)) => {
+            let tap = dlc_engine::TapOutput::new(output, state.tap_tx.clone());
+            state.engine.swap_output(Box::new(tap), &label);
+            Ok(Json(ReconnectResponse { dmx_output: label }))
         }
-        "artnet" => {
-            let result = match &config.dmx_target_ip {
-                Some(ip) => {
-                    let addr: std::net::IpAddr = ip.parse()
-                        .map_err(|_| ApiError::Internal(format!("invalid IP: {ip}")))?;
-                    dlc_engine::ArtNetOutput::unicast(addr)
-                }
-                None => dlc_engine::ArtNetOutput::broadcast(),
-            };
-            match result {
-                Ok(output) => {
-                    let (tap_tx, _) = tokio::sync::mpsc::channel(64);
-                    let tap = dlc_engine::TapOutput::new(Box::new(output), tap_tx);
-                    state.engine.swap_output(Box::new(tap), "artnet");
-                    Ok(Json(ReconnectResponse { dmx_output: "artnet".to_string() }))
-                }
-                Err(e) => Err(ApiError::Internal(format!("Art-Net init failed: {e}"))),
-            }
-        }
-        "sacn" => {
-            match dlc_engine::SacnOutput::new(config.sacn_priority) {
-                Ok(output) => {
-                    let (tap_tx, _) = tokio::sync::mpsc::channel(64);
-                    let tap = dlc_engine::TapOutput::new(Box::new(output), tap_tx);
-                    state.engine.swap_output(Box::new(tap), "sacn");
-                    Ok(Json(ReconnectResponse { dmx_output: "sacn".to_string() }))
-                }
-                Err(e) => Err(ApiError::Internal(format!("sACN init failed: {e}"))),
-            }
-        }
-        other => {
-            Err(ApiError::bad_request(format!("reconnect not supported for output type '{other}'")))
-        }
+        Err(e) => Err(ApiError::Internal(e)),
     }
 }
 
@@ -127,11 +121,13 @@ mod tests {
         );
 
         let (ws_broadcast, _) = tokio::sync::broadcast::channel(256);
+        let (tap_tx, _) = tokio::sync::mpsc::channel(64);
         let state = crate::state::AppState {
             config: std::sync::Arc::new(crate::config::ServerConfig::from_env()),
             db,
             engine_tx: tx,
             engine: std::sync::Arc::new(engine),
+            tap_tx,
             ws_broadcast,
             cue_executor,
             fixture_types,

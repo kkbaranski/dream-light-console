@@ -27,11 +27,13 @@ pub async fn spawn_test_state() -> AppState {
     let cue_executor = CueExecutor::new(db.clone(), engine_tx.clone(), fixture_types.clone());
     let engine = dlc_engine::EngineHandle::start(Box::new(dlc_engine::NullOutput), "null");
     let (ws_broadcast, _) = tokio::sync::broadcast::channel(256);
+    let (tap_tx, _) = tokio::sync::mpsc::channel(64);
     AppState {
         config: Arc::new(ServerConfig::from_env()),
         db,
         engine_tx,
         engine: Arc::new(engine),
+        tap_tx,
         ws_broadcast,
         cue_executor,
         fixture_types,
