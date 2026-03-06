@@ -1,18 +1,18 @@
-mod concert_programs;
-mod concerts;
-mod cue_lists;
-mod cues;
-mod dmx;
-mod fixture_groups;
-mod fixture_types;
-mod fixtures;
-mod health;
-mod objects;
-mod placements;
-mod playback;
-mod songs;
-mod stages;
-mod ws;
+pub mod concert_programs;
+pub mod concerts;
+pub mod cue_lists;
+pub mod cues;
+pub mod dmx;
+pub mod fixture_groups;
+pub mod fixture_types;
+pub mod fixtures;
+pub mod health;
+pub mod objects;
+pub mod placements;
+pub mod playback;
+pub mod songs;
+pub mod stages;
+pub mod ws;
 
 use axum::{
     http::{header, Method, StatusCode},

@@ -374,6 +374,7 @@ dependencies = [
  "axum-extra",
  "dlc-engine",
  "dlc-protocol",
+ "dlc-server",
  "futures-util",
  "http-body-util",
  "image",

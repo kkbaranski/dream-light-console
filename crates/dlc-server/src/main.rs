@@ -9,18 +9,11 @@ use dlc_protocol::DMX_CHANNELS_PER_UNIVERSE;
 use sqlx::sqlite::{SqliteConnectOptions, SqlitePoolOptions};
 use tracing_subscriber::EnvFilter;
 
-mod config;
-pub(crate) mod cue_executor;
-pub(crate) mod db;
-mod error;
-pub(crate) mod fixture_types;
-mod routes;
-mod state;
-#[cfg(test)]
-pub(crate) mod test_helpers;
-
-use config::ServerConfig;
-use state::AppState;
+use dlc_server::config::ServerConfig;
+use dlc_server::cue_executor;
+use dlc_server::fixture_types;
+use dlc_server::routes;
+use dlc_server::state::{AppState, WsBroadcast};
 
 const DB_MAX_CONNECTIONS: u32 = 5;
 const WS_BROADCAST_CAPACITY: usize = 256;
@@ -86,31 +79,13 @@ fn create_dmx_output(
     }
 }
 
-/// Try to open an ENTTEC DMX USB Pro connection. Extracted for reuse in reconnect.
-pub(crate) fn try_open_enttec_pro(
-    config: &ServerConfig,
-) -> Result<EnttecProOutput> {
-    let port_name = match &config.dmx_serial_port {
-        Some(port) => port.clone(),
-        None => {
-            let ports = serialport::available_ports()
-                .map_err(|e| anyhow::anyhow!("failed to list serial ports: {e}"))?;
-            ports
-                .iter()
-                .find(|p| p.port_name.contains("usbserial"))
-                .map(|p| p.port_name.clone())
-                .ok_or_else(|| anyhow::anyhow!(
-                    "no ENTTEC DMX USB Pro found; set DLC_SERIAL_PORT explicitly"
-                ))?
-        }
-    };
-    tracing::info!("DMX output: ENTTEC DMX USB Pro on {port_name}");
-    Ok(EnttecProOutput::new(&port_name)?)
+fn try_open_enttec_pro(config: &ServerConfig) -> Result<EnttecProOutput> {
+    dlc_server::try_open_enttec_pro(config)
 }
 
 fn spawn_relay_task(
     mut tap_rx: tokio::sync::mpsc::Receiver<dlc_engine::TapFrame>,
-    broadcast_tx: tokio::sync::broadcast::Sender<state::WsBroadcast>,
+    broadcast_tx: tokio::sync::broadcast::Sender<WsBroadcast>,
 ) {
     tokio::spawn(async move {
         loop {
@@ -123,7 +98,7 @@ fn spawn_relay_task(
 
             for (universe_id, data) in latest {
                 if broadcast_tx.receiver_count() > 0 {
-                    let _ = broadcast_tx.send(state::WsBroadcast::UniverseUpdate {
+                    let _ = broadcast_tx.send(WsBroadcast::UniverseUpdate {
                         universe: universe_id,
                         channels: data.to_vec(),
                     });

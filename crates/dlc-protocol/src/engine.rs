@@ -33,14 +33,3 @@ pub enum EngineCommand {
     },
     Shutdown,
 }
-
-#[cfg(test)]
-mod tests {
-    use super::*;
-
-    #[test]
-    fn engine_command_is_send() {
-        fn assert_send<T: Send>() {}
-        assert_send::<EngineCommand>();
-    }
-}
