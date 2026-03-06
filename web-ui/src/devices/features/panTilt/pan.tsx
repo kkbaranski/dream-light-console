@@ -1,12 +1,12 @@
-import { getCachedNode, readField, DEG2RAD, type FeatureDef } from "../../feature";
-import { Value16BitSlider, ValueSlider, GearButton } from "../../../components/stage/inspectorPrimitives";
+import {getCachedNode, readField, type FeatureDef, DEG2RAD} from "../../feature";
+import { Value16BitSlider, ValueSlider, GearButton }         from "../../../components/stage/inspectorPrimitives";
 import { createSpline, type CurvePoint } from "../../../lib/cubicSpline";
 
 export interface PanConfig {
   /** Omit for manual-only control (no DMX output). Use { coarse, fine } for 16-bit. */
   readonly dmx?: { readonly offset: number } | { readonly coarse: number; readonly fine: number };
   readonly modelNode: string;     // GLB node name (e.g. "Yoke")
-  readonly totalDegrees: number;  // total range, centered at DMX 128 (e.g. 540 → ±270°)
+  readonly totalDegrees: number;  // total range, centered at DMX 128 (e.g., 540 → ±270°)
   readonly responseCurve?: ReadonlyArray<CurvePoint>;
 }
 
@@ -47,7 +47,7 @@ export const pan: FeatureDef<PanConfig> = {
   },
 
   Inspector: ({ ctx, config }) => {
-    const is16bit = !!(config.dmx && "coarse" in config.dmx);
+    const is16bit = (config.dmx && "coarse" in config.dmx);
     const value = ctx.shared((obj) => readField<number>(obj, "pan", 0)) ?? ctx.avgInt((obj) => readField<number>(obj, "pan", 0));
     const mixed = ctx.isMixed((obj) => readField<number>(obj, "pan", 0));
 

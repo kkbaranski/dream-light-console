@@ -1,6 +1,6 @@
 import { Component, Suspense, useEffect, useRef, type ReactNode } from "react";
 import { Canvas, useThree } from "@react-three/fiber";
-import { OrbitControls, useTexture } from "@react-three/drei";
+import { OrbitControls, useTexture, Environment } from "@react-three/drei";
 import * as THREE from "three";
 import { useStageEditorStore } from "../../store/stageEditorStore";
 import {
@@ -147,6 +147,7 @@ function SceneContent() {
 
   return (
     <>
+      <Environment preset="studio" environmentIntensity={0.17} />
       <hemisphereLight args={["#4a6080", "#101318", 0.9]} />
       <directionalLight position={[6, 12, 8]} intensity={1.4} castShadow shadow-mapSize-width={2048} shadow-mapSize-height={2048} />
       <directionalLight position={[-5, 5, -6]} intensity={0.35} color="#7090bb" />
@@ -230,6 +231,13 @@ export function StageScene() {
     const deviceType = event.dataTransfer.getData("dlc/device-type");
     if (!deviceType || !(deviceType in DEVICE_REGISTRY) || !cameraRef.current || !sceneRef.current) return;
 
+    const fixtureId = event.dataTransfer.getData("dlc/fixture-id") || undefined;
+    const fixtureName = event.dataTransfer.getData("dlc/fixture-name") || undefined;
+    const fixtureMode = event.dataTransfer.getData("dlc/fixture-mode") || undefined;
+
+    // Guard: don't place the same physical fixture twice
+    if (fixtureId && useStageEditorStore.getState().objects.some((o) => o.fixtureId === fixtureId)) return;
+
     event.preventDefault();
 
     const rect = event.currentTarget.getBoundingClientRect();
@@ -254,7 +262,7 @@ export function StageScene() {
     if (!firstHit?.object.userData.isFloor) return;
 
     const position: [number, number, number] = [floorPoint.x, 0, floorPoint.z];
-    addObject({ id: crypto.randomUUID(), type: deviceType as import("../../scene/types").SceneObjectType, position });
+    addObject({ id: crypto.randomUUID(), type: deviceType as import("../../scene/types").SceneObjectType, position, fixtureId, fixtureName, fixtureMode });
   }
 
   return (

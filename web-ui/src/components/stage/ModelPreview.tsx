@@ -1,6 +1,6 @@
 import { Suspense, useMemo } from "react";
 import { Canvas } from "@react-three/fiber";
-import { useGLTF, OrbitControls } from "@react-three/drei";
+import { useGLTF, OrbitControls, Environment } from "@react-three/drei";
 import * as THREE from "three";
 
 function ModelMesh({ path }: { path: string }) {
@@ -31,13 +31,13 @@ function ModelMesh({ path }: { path: string }) {
 export function ModelPreview({ path }: { path: string }) {
   return (
     <Canvas
+      shadows
       camera={{ position: [1, 1, 2], fov: 45 }}
-      gl={{ antialias: true, alpha: true }}
-      style={{ background: "transparent" }}
+      gl={{ antialias: true, localClippingEnabled: true, toneMapping: THREE.AgXToneMapping }}
+      style={{ background: "#1f2937" }}
+      onCreated={({ scene }) => { scene.environmentIntensity = 0.17; }}
     >
-      <ambientLight intensity={1.2} />
-      <directionalLight position={[2, 4, 3]} intensity={1.5} />
-      <directionalLight position={[-2, 1, -2]} intensity={0.4} color="#7090bb" />
+      <Environment preset="studio" />
       <Suspense fallback={null}>
         <ModelMesh path={path} />
       </Suspense>

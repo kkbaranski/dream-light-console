@@ -4,6 +4,7 @@ export type { SceneObjectType } from "../devices/registry";
 export interface SceneObject {
   readonly id: string;
   readonly type: import("../devices/registry").SceneObjectType;
+  readonly fixtureId?: string;
   position: [number, number, number];
   lockedFields: string[];
   mode: string;

@@ -1,4 +1,4 @@
-import { useState, type ReactNode } from "react";
+import { useState, useMemo, type ReactNode } from "react";
 import { useStageEditorStore } from "../../store/stageEditorStore";
 import { ModelPreview } from "./ModelPreview";
 import {
@@ -8,8 +8,9 @@ import {
 } from "../../materials/registry";
 import { stageDefinitions, type StageDefinition } from "../../stages/registry";
 import { ObjectInspector } from "./ObjectInspector";
-import { DEVICE_REGISTRY, hasBeam } from "../../devices/registry";
+import { DEVICE_REGISTRY } from "../../devices/registry";
 import type { SceneObjectType } from "../../scene/types";
+import { useFixtures, useFixtureTypes, type Fixture, type FixtureType } from "../../api/hooks";
 
 // ─── Section Tabs ──────────────────────────────────────────────────────────────
 
@@ -116,7 +117,7 @@ function MaterialOption({
   );
 }
 
-// ─── Catalog Item ──────────────────────────────────────────────────────────────
+// ─── Catalog Item (props only) ────────────────────────────────────────────────
 
 function CatalogItem({ deviceType }: { deviceType: SceneObjectType }) {
   const def = DEVICE_REGISTRY[deviceType];
@@ -140,11 +141,43 @@ function CatalogItem({ deviceType }: { deviceType: SceneObjectType }) {
   );
 }
 
-// ─── Catalog data ──────────────────────────────────────────────────────────────
+// ─── Inventory Fixture Item ───────────────────────────────────────────────────
 
-const LIGHT_TYPES: SceneObjectType[] = Object.keys(DEVICE_REGISTRY)
-  .filter((key) => hasBeam(DEVICE_REGISTRY[key as SceneObjectType]))
-  .map((key) => key as SceneObjectType);
+function FixtureItem({ fixture, typeBadge }: { fixture: Fixture; typeBadge: string }) {
+  const def = DEVICE_REGISTRY[fixture.fixture_type_id as SceneObjectType] as
+    | (typeof DEVICE_REGISTRY)[SceneObjectType]
+    | undefined;
+
+  function handleDragStart(event: React.DragEvent<HTMLDivElement>) {
+    event.dataTransfer.setData("dlc/device-type", fixture.fixture_type_id);
+    event.dataTransfer.setData("dlc/fixture-id", fixture.id);
+    event.dataTransfer.setData("dlc/fixture-name", fixture.label);
+    event.dataTransfer.setData("dlc/fixture-mode", fixture.dmx_mode);
+    event.dataTransfer.effectAllowed = "copy";
+  }
+
+  return (
+    <div
+      draggable
+      onDragStart={handleDragStart}
+      className="flex items-center gap-2 p-2 rounded-lg border border-gray-700 hover:border-gray-500 cursor-grab active:cursor-grabbing text-left select-none"
+    >
+      <div className="w-8 h-8 rounded overflow-hidden bg-gray-800 flex-shrink-0 flex items-center justify-center">
+        {def ? (
+          <ModelPreview path={def.modelPath} />
+        ) : (
+          <span className="text-[10px] text-gray-500">{fixture.label.charAt(0).toUpperCase()}</span>
+        )}
+      </div>
+      <div className="flex-1 min-w-0">
+        <div className="text-xs text-gray-300 truncate">{fixture.label}</div>
+        <div className="text-[10px] text-gray-500 truncate">{typeBadge}</div>
+      </div>
+    </div>
+  );
+}
+
+// ─── Catalog data ──────────────────────────────────────────────────────────────
 
 const AUDIO_TYPES: SceneObjectType[] = ["speaker_1", "speaker_2", "mic"];
 
@@ -190,6 +223,28 @@ export function MaterialPanel() {
   const [floorTab, setFloorTab] = useState<"solid" | "textures">("solid");
   const [wallTab,  setWallTab]  = useState<"solid" | "textures">("solid");
 
+  const objects = useStageEditorStore((state) => state.objects);
+  const { data: fixtures } = useFixtures();
+  const { data: fixtureTypes } = useFixtureTypes();
+
+  const placedFixtureIds = useMemo(
+    () => new Set(objects.flatMap((o) => (o.fixtureId ? [o.fixtureId] : []))),
+    [objects],
+  );
+
+  const typesById = useMemo(
+    () => new Map((fixtureTypes ?? []).map((t: FixtureType) => [t.id, t])),
+    [fixtureTypes],
+  );
+
+  // Only show fixtures that are known device types and not yet placed
+  const availableFixtures = useMemo(
+    () => (fixtures ?? []).filter(
+      (f: Fixture) => f.fixture_type_id in DEVICE_REGISTRY && !placedFixtureIds.has(f.id),
+    ),
+    [fixtures, placedFixtureIds],
+  );
+
   const floorSolids   = floorMaterials.filter((m) => m.kind === "solid");
   const floorTextures = floorMaterials.filter((m) => m.kind === "texture");
   const wallSolids    = wallMaterials.filter((m) => m.kind === "solid");
@@ -203,12 +258,28 @@ export function MaterialPanel() {
 
       <ObjectInspector />
 
-      {/* ── Fixtures ── */}
+      {/* ── Fixtures (inventory-based) ── */}
       <CollapsibleSection title="Fixtures">
-        <p className="text-xs text-gray-500 mb-2">Drag onto the canvas to place</p>
-        <div className="grid grid-cols-2 gap-2">
-          {LIGHT_TYPES.map((type) => <CatalogItem key={type} deviceType={type} />)}
-        </div>
+        {availableFixtures.length > 0 ? (
+          <>
+            <p className="text-xs text-gray-500 mb-2">Drag onto the stage to place</p>
+            <div className="flex flex-col gap-1.5">
+              {availableFixtures.map((f: Fixture) => (
+                <FixtureItem
+                  key={f.id}
+                  fixture={f}
+                  typeBadge={typesById.get(f.fixture_type_id)?.label ?? f.fixture_type_id}
+                />
+              ))}
+            </div>
+          </>
+        ) : (
+          <p className="text-xs text-gray-600">
+            {(fixtures ?? []).length === 0
+              ? "No fixtures in inventory. Create fixtures in the Fixtures tab."
+              : "All fixtures have been placed."}
+          </p>
+        )}
       </CollapsibleSection>
 
       {/* ── Props ── */}

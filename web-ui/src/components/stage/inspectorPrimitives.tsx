@@ -1,5 +1,5 @@
-import { useState, useRef, useEffect } from "react";
-import { HexColorPicker } from "react-colorful";
+import React, { useState, useRef, useEffect } from "react";
+import { HexColorPicker }                     from "react-colorful";
 import { useStageEditorStore } from "../../store/stageEditorStore";
 import { LockClosedIcon, LockOpenIcon, GearIcon } from "../ui/Icons";
 

@@ -37,9 +37,10 @@ function buildNewObject(
   type: SceneObjectType,
   position: [number, number, number],
   existingObjects: SceneObject[],
+  opts?: { fixtureId?: string; fixtureName?: string; fixtureMode?: string },
 ): SceneObject {
   const def  = DEVICE_REGISTRY[type];
-  const mode = def.defaultMode;
+  const mode = opts?.fixtureMode ?? def.defaultMode;
   const features = activeFeatures(def, mode);
 
   // Gather defaults from every feature in the starting mode.
@@ -48,8 +49,10 @@ function buildNewObject(
     Object.assign(featureDefaults, feature.defaultState(config));
   }
 
-  // Auto-number the name when the device has one (e.g. "Moving Head" → "Moving Head 3").
-  if (typeof featureDefaults.name === "string") {
+  // Use the fixture label if provided, otherwise auto-number.
+  if (opts?.fixtureName) {
+    featureDefaults.name = opts.fixtureName;
+  } else if (typeof featureDefaults.name === "string") {
     const count = existingObjects.filter((object) => object.type === type).length + 1;
     featureDefaults.name = `${featureDefaults.name} ${count}`;
   }
@@ -60,6 +63,7 @@ function buildNewObject(
     position,
     lockedFields: [],
     mode,
+    ...(opts?.fixtureId ? { fixtureId: opts.fixtureId } : {}),
     ...featureDefaults,
   } as unknown as SceneObject;
 }
@@ -118,6 +122,9 @@ interface AddObjectParams {
   id: string;
   type: SceneObjectType;
   position: [number, number, number];
+  fixtureId?: string;
+  fixtureName?: string;
+  fixtureMode?: string;
 }
 
 interface StageEditorStore {
@@ -188,9 +195,9 @@ export const useStageEditorStore = create<StageEditorStore>((set) => ({
   setWallTileSize: (size) => set((state) => pushHistory(state, { wallTileSize: size })),
   setStageModel: (id) => set((state) => pushHistory(state, { stageModelId: id })),
   // ── Object actions ─────────────────────────────────────────────────────────
-  addObject: ({ id, type, position }) =>
+  addObject: ({ id, type, position, fixtureId, fixtureName, fixtureMode }) =>
     set((state) => {
-      const newObject = buildNewObject(id, type, position, state.objects);
+      const newObject = buildNewObject(id, type, position, state.objects, { fixtureId, fixtureName, fixtureMode });
       return pushHistory(state, { objects: [...state.objects, newObject] });
     }),
   removeObjects: (ids) =>
@@ -251,7 +258,7 @@ export const useStageEditorStore = create<StageEditorStore>((set) => ({
   copySelected: () =>
     set((state) => ({
       clipboard: state.objects.filter(
-        (o) => state.selectedIds.includes(o.id) && DEVICE_REGISTRY[o.type].supportsCopyPaste,
+        (o) => state.selectedIds.includes(o.id) && DEVICE_REGISTRY[o.type].supportsCopyPaste && !o.fixtureId,
       ),
     })),
   paste: () =>
