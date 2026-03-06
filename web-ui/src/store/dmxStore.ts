@@ -5,6 +5,7 @@ interface DMXStore {
   channels: number[];
   isConnected: boolean;
   backendOnline: boolean;
+  dmxOutput: string;
   latencyMs: number | null;
   /** Send a DMX control message over WebSocket (throttled via RAF). */
   sendControl: (msg: ControlMessage) => void;
@@ -15,6 +16,7 @@ interface DMXStore {
   setChannel: (index: number, value: number) => void;
   setConnected: (isConnected: boolean) => void;
   setBackendOnline: (backendOnline: boolean) => void;
+  setDmxOutput: (dmxOutput: string) => void;
   setLatencyMs: (ms: number | null) => void;
   /** Called once by useWebSocket to inject the real send functions. */
   _bindControls: (
@@ -27,6 +29,7 @@ export const useDMXStore = create<DMXStore>((set) => ({
   channels: Array<number>(512).fill(0),
   isConnected: false,
   backendOnline: false,
+  dmxOutput: "none",
   latencyMs: null,
   sendControl: () => {},
   sendPing: () => {},
@@ -39,6 +42,7 @@ export const useDMXStore = create<DMXStore>((set) => ({
     }),
   setConnected: (isConnected) => set({ isConnected }),
   setBackendOnline: (backendOnline) => set({ backendOnline }),
+  setDmxOutput: (dmxOutput) => set({ dmxOutput }),
   setLatencyMs: (latencyMs) => set({ latencyMs }),
   _bindControls: (sendControl, sendPing) => set({ sendControl, sendPing }),
 }));

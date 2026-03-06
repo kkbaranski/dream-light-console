@@ -8,6 +8,7 @@ pub struct HealthResponse {
     pub version: String,
     pub engine_hz: u32,
     pub connected_clients: u32,
+    pub dmx_output: String,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, TS)]

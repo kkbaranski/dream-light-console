@@ -6,6 +6,7 @@ const POLL_INTERVAL_MS = 3000;
 
 export function useApi(): { backendOnline: boolean } {
   const setBackendOnline = useDMXStore((state) => state.setBackendOnline);
+  const setDmxOutput = useDMXStore((state) => state.setDmxOutput);
   const backendOnline = useDMXStore((state) => state.backendOnline);
 
   useEffect(() => {
@@ -18,6 +19,7 @@ export function useApi(): { backendOnline: boolean } {
         }
         const data = (await response.json()) as HealthResponse;
         setBackendOnline(data.status === "ok");
+        setDmxOutput(data.dmx_output);
       } catch {
         setBackendOnline(false);
       }
@@ -26,7 +28,7 @@ export function useApi(): { backendOnline: boolean } {
     void checkHealth();
     const interval = setInterval(() => void checkHealth(), POLL_INTERVAL_MS);
     return () => clearInterval(interval);
-  }, [setBackendOnline]);
+  }, [setBackendOnline, setDmxOutput]);
 
   return { backendOnline };
 }

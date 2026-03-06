@@ -25,7 +25,7 @@ pub async fn spawn_test_state() -> AppState {
     let (engine_tx, _) = std::sync::mpsc::sync_channel(1024);
     let fixture_types = Arc::new(crate::fixture_types::load_embedded());
     let cue_executor = CueExecutor::new(db.clone(), engine_tx.clone(), fixture_types.clone());
-    let engine = dlc_engine::EngineHandle::start(Box::new(dlc_engine::NullOutput));
+    let engine = dlc_engine::EngineHandle::start(Box::new(dlc_engine::NullOutput), "null");
     let (ws_broadcast, _) = tokio::sync::broadcast::channel(256);
     AppState {
         config: Arc::new(ServerConfig::from_env()),

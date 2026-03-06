@@ -1,5 +1,5 @@
 use std::collections::HashMap;
-use std::sync::mpsc;
+use std::sync::{mpsc, Arc, Mutex};
 use std::time::{Duration, Instant};
 
 use dlc_protocol::{EngineCommand, ENGINE_HZ};
@@ -20,6 +20,8 @@ pub struct Engine {
     universes: HashMap<u16, DmxUniverse>,
     interpolations: HashMap<u16, InterpolationState>,
     output: Box<dyn DmxOutput>,
+    swap_slot: Arc<Mutex<Option<Box<dyn DmxOutput>>>>,
+    output_label: Arc<Mutex<String>>,
     command_rx: mpsc::Receiver<EngineCommand>,
     tick_interval: Duration,
     tick_count: u64,
@@ -30,12 +32,16 @@ pub struct Engine {
 impl Engine {
     pub fn new(
         output: Box<dyn DmxOutput>,
+        swap_slot: Arc<Mutex<Option<Box<dyn DmxOutput>>>>,
+        output_label: Arc<Mutex<String>>,
         command_rx: mpsc::Receiver<EngineCommand>,
     ) -> Self {
         Self {
             universes: HashMap::new(),
             interpolations: HashMap::new(),
             output,
+            swap_slot,
+            output_label,
             command_rx,
             tick_interval: Duration::from_secs_f64(1.0 / ENGINE_HZ as f64),
             tick_count: 0,
@@ -106,7 +112,18 @@ impl Engine {
                 }
             }
 
-            // 2. Tick interpolations
+            // 2. Check for hot-swapped output
+            if let Ok(mut slot) = self.swap_slot.try_lock() {
+                if let Some(new_output) = slot.take() {
+                    tracing::info!("DMX output swapped to '{}'", new_output.label());
+                    if let Ok(mut label) = self.output_label.try_lock() {
+                        *label = new_output.label().to_string();
+                    }
+                    self.output = new_output;
+                }
+            }
+
+            // 3. Tick interpolations
             for (&universe_id, interpolation) in &mut self.interpolations {
                 if interpolation.is_fading() {
                     if let Some(universe_buffer) = self.universes.get_mut(&universe_id) {
@@ -115,12 +132,12 @@ impl Engine {
                 }
             }
 
-            // 3. Send all active universes to output
+            // 4. Send all active universes to output
             self.send_output();
 
             self.tick_count += 1;
 
-            // 4. Sleep until next anchored tick to prevent drift accumulation
+            // 5. Sleep until next anchored tick to prevent drift accumulation
             next_tick += self.tick_interval;
             let now = Instant::now();
             if now < next_tick {
@@ -171,24 +188,49 @@ impl Engine {
 /// Thread-safe handle for sending commands to a running engine.
 pub struct EngineHandle {
     command_tx: mpsc::SyncSender<EngineCommand>,
+    swap_slot: Arc<Mutex<Option<Box<dyn DmxOutput>>>>,
+    output_label: Arc<Mutex<String>>,
     thread: Option<std::thread::JoinHandle<()>>,
 }
 
 impl EngineHandle {
-    pub fn start(output: Box<dyn DmxOutput>) -> Self {
+    pub fn start(output: Box<dyn DmxOutput>, label: &str) -> Self {
         let (command_tx, command_rx) = mpsc::sync_channel(COMMAND_CHANNEL_CAPACITY);
+        let swap_slot: Arc<Mutex<Option<Box<dyn DmxOutput>>>> = Arc::new(Mutex::new(None));
+        let output_label = Arc::new(Mutex::new(label.to_string()));
+
+        let swap_slot_clone = swap_slot.clone();
+        let output_label_clone = output_label.clone();
+
         let thread = std::thread::Builder::new()
             .name("dlc-engine".into())
             .spawn(move || {
-                let mut engine = Engine::new(output, command_rx);
+                let mut engine = Engine::new(output, swap_slot_clone, output_label_clone, command_rx);
                 engine.run();
             })
             .expect("failed to spawn engine thread");
 
         Self {
             command_tx,
+            swap_slot,
+            output_label,
             thread: Some(thread),
         }
+    }
+
+    /// Hot-swap the DMX output. The engine thread will pick this up on the next tick.
+    pub fn swap_output(&self, output: Box<dyn DmxOutput>, label: &str) {
+        if let Ok(mut slot) = self.swap_slot.lock() {
+            *slot = Some(output);
+        }
+        if let Ok(mut l) = self.output_label.lock() {
+            *l = label.to_string();
+        }
+    }
+
+    /// Returns the label of the currently active DMX output.
+    pub fn output_label(&self) -> String {
+        self.output_label.lock().map(|l| l.clone()).unwrap_or_default()
     }
 
     /// Send a command to the engine. Returns `Err` if the engine has stopped
@@ -259,7 +301,7 @@ mod tests {
     #[test]
     fn engine_outputs_at_44hz() {
         let (output, mock) = SharedMockOutput::new();
-        let handle = EngineHandle::start(Box::new(output));
+        let handle = EngineHandle::start(Box::new(output), "shared-mock");
 
         // Set a channel so the engine has a universe to output
         handle
@@ -286,7 +328,7 @@ mod tests {
     #[test]
     fn set_channel_reflected_in_output() {
         let (output, mock) = SharedMockOutput::new();
-        let handle = EngineHandle::start(Box::new(output));
+        let handle = EngineHandle::start(Box::new(output), "shared-mock");
 
         handle
             .send(EngineCommand::SetChannel {
@@ -308,7 +350,7 @@ mod tests {
     #[test]
     fn set_universe_replaces_all_channels() {
         let (output, mock) = SharedMockOutput::new();
-        let handle = EngineHandle::start(Box::new(output));
+        let handle = EngineHandle::start(Box::new(output), "shared-mock");
 
         handle
             .send(EngineCommand::SetUniverse {
@@ -328,7 +370,7 @@ mod tests {
     #[test]
     fn shutdown_stops_engine() {
         let (output, _mock) = SharedMockOutput::new();
-        let handle = EngineHandle::start(Box::new(output));
+        let handle = EngineHandle::start(Box::new(output), "shared-mock");
 
         let start = Instant::now();
         handle.shutdown().unwrap();
@@ -344,7 +386,7 @@ mod tests {
     #[test]
     fn multiple_universes() {
         let (output, mock) = SharedMockOutput::new();
-        let handle = EngineHandle::start(Box::new(output));
+        let handle = EngineHandle::start(Box::new(output), "shared-mock");
 
         handle
             .send(EngineCommand::SetChannel {
@@ -372,7 +414,7 @@ mod tests {
     #[test]
     fn engine_handle_send_after_shutdown_fails() {
         let (output, _mock) = SharedMockOutput::new();
-        let handle = EngineHandle::start(Box::new(output));
+        let handle = EngineHandle::start(Box::new(output), "shared-mock");
 
         let sender = handle.sender();
         handle.shutdown().unwrap();
@@ -384,7 +426,7 @@ mod tests {
     #[test]
     fn commands_drain_non_blocking() {
         let (output, mock) = SharedMockOutput::new();
-        let handle = EngineHandle::start(Box::new(output));
+        let handle = EngineHandle::start(Box::new(output), "shared-mock");
 
         // Send 1000 commands rapidly — bounded channel may reject some if full,
         // but the engine should still produce frames from what it received
@@ -426,7 +468,12 @@ mod tests {
 
         // Start engine — all senders already dropped
         let _thread = std::thread::spawn(move || {
-            let mut engine = Engine::new(Box::new(output), rx);
+            let mut engine = Engine::new(
+                Box::new(output),
+                Arc::new(Mutex::new(None)),
+                Arc::new(Mutex::new("mock".to_string())),
+                rx,
+            );
             engine.run();
         });
 
@@ -457,7 +504,12 @@ mod tests {
         drop(tx);
 
         let _thread = std::thread::spawn(move || {
-            let mut engine = Engine::new(Box::new(output), rx);
+            let mut engine = Engine::new(
+                Box::new(output),
+                Arc::new(Mutex::new(None)),
+                Arc::new(Mutex::new("mock".to_string())),
+                rx,
+            );
             engine.run();
         });
 
@@ -474,7 +526,7 @@ mod tests {
     #[test]
     fn hold_last_look_shutdown_still_works() {
         let (output, _mock) = SharedMockOutput::new();
-        let handle = EngineHandle::start(Box::new(output));
+        let handle = EngineHandle::start(Box::new(output), "shared-mock");
 
         handle
             .send(EngineCommand::SetChannel {
@@ -500,7 +552,7 @@ mod tests {
     #[test]
     fn drop_shuts_down_engine() {
         let (output, _mock) = SharedMockOutput::new();
-        let handle = EngineHandle::start(Box::new(output));
+        let handle = EngineHandle::start(Box::new(output), "shared-mock");
 
         // Dropping the handle should send Shutdown and join the thread
         let start = Instant::now();
@@ -516,7 +568,7 @@ mod tests {
     #[test]
     fn master_dimmer_scales_output() {
         let (output, mock) = SharedMockOutput::new();
-        let handle = EngineHandle::start(Box::new(output));
+        let handle = EngineHandle::start(Box::new(output), "shared-mock");
 
         handle
             .send(EngineCommand::SetChannel {
@@ -543,7 +595,7 @@ mod tests {
     #[test]
     fn master_dimmer_full_passes_through() {
         let (output, mock) = SharedMockOutput::new();
-        let handle = EngineHandle::start(Box::new(output));
+        let handle = EngineHandle::start(Box::new(output), "shared-mock");
 
         handle
             .send(EngineCommand::SetChannel {
@@ -565,7 +617,7 @@ mod tests {
     #[test]
     fn blackout_overrides_all_output() {
         let (output, mock) = SharedMockOutput::new();
-        let handle = EngineHandle::start(Box::new(output));
+        let handle = EngineHandle::start(Box::new(output), "shared-mock");
 
         handle
             .send(EngineCommand::SetChannel {
@@ -592,7 +644,7 @@ mod tests {
     #[test]
     fn blackout_release_restores_output() {
         let (output, mock) = SharedMockOutput::new();
-        let handle = EngineHandle::start(Box::new(output));
+        let handle = EngineHandle::start(Box::new(output), "shared-mock");
 
         handle
             .send(EngineCommand::SetChannel {

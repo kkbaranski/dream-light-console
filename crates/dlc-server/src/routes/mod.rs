@@ -200,6 +200,10 @@ pub fn build_router(state: AppState) -> Router {
             "/api/universes/{universe}/channels/{channel}",
             axum::routing::put(dmx::set_channel),
         )
+        .route(
+            "/api/dmx/reconnect",
+            axum::routing::post(dmx::reconnect),
+        )
         // WebSocket
         .route("/ws", get(ws::upgrade));
 

@@ -29,59 +29,83 @@ const RELAY_POLL_INTERVAL_MS: u64 = 100;
 
 fn create_dmx_output(
     config: &ServerConfig,
-) -> Result<Box<dyn dlc_engine::DmxOutput>> {
-    let output: Box<dyn dlc_engine::DmxOutput> = match config.dmx_output_type.as_str() {
+) -> (Box<dyn dlc_engine::DmxOutput>, String) {
+    match config.dmx_output_type.as_str() {
         "artnet" => {
-            let output = match &config.dmx_target_ip {
+            let result = match &config.dmx_target_ip {
                 Some(ip) => {
                     let addr: std::net::IpAddr = ip.parse()
                         .unwrap_or_else(|_| panic!("invalid DLC_DMX_TARGET_IP: {ip}"));
                     tracing::info!("DMX output: Art-Net unicast to {addr}");
-                    ArtNetOutput::unicast(addr)?
+                    ArtNetOutput::unicast(addr)
                 }
                 None => {
                     tracing::info!("DMX output: Art-Net broadcast");
-                    ArtNetOutput::broadcast()?
+                    ArtNetOutput::broadcast()
                 }
             };
-            Box::new(output)
+            match result {
+                Ok(output) => (Box::new(output), "artnet".to_string()),
+                Err(e) => {
+                    tracing::warn!("Art-Net init failed: {e} — starting without DMX hardware");
+                    (Box::new(NullOutput), "none".to_string())
+                }
+            }
         }
         "enttec_pro" => {
-            let port_name = match &config.dmx_serial_port {
-                Some(port) => port.clone(),
-                None => {
-                    let ports = serialport::available_ports()
-                        .map_err(|e| anyhow::anyhow!("failed to list serial ports: {e}"))?;
-                    ports
-                        .iter()
-                        .find(|p| p.port_name.contains("usbserial"))
-                        .map(|p| p.port_name.clone())
-                        .ok_or_else(|| anyhow::anyhow!(
-                            "no ENTTEC DMX USB Pro found; set DLC_SERIAL_PORT explicitly"
-                        ))?
+            match try_open_enttec_pro(config) {
+                Ok(output) => (Box::new(output), "enttec_pro".to_string()),
+                Err(e) => {
+                    tracing::warn!("ENTTEC Pro init failed: {e} — starting without DMX hardware");
+                    (Box::new(NullOutput), "none".to_string())
                 }
-            };
-            tracing::info!("DMX output: ENTTEC DMX USB Pro on {port_name}");
-            Box::new(EnttecProOutput::new(&port_name)?)
+            }
         }
         "sacn" => {
             tracing::info!("DMX output: sACN/E1.31 multicast (priority={})", config.sacn_priority);
-            Box::new(SacnOutput::new(config.sacn_priority)?)
+            match SacnOutput::new(config.sacn_priority) {
+                Ok(output) => (Box::new(output), "sacn".to_string()),
+                Err(e) => {
+                    tracing::warn!("sACN init failed: {e} — starting without DMX hardware");
+                    (Box::new(NullOutput), "none".to_string())
+                }
+            }
         }
         "mock" => {
             tracing::info!("DMX output: mock (no hardware)");
-            Box::new(MockOutput::new())
+            (Box::new(MockOutput::new()), "mock".to_string())
         }
         "null" => {
             tracing::info!("DMX output: null (silent)");
-            Box::new(NullOutput)
+            (Box::new(NullOutput), "none".to_string())
         }
         other => {
             tracing::warn!("Unknown DMX output type '{other}', falling back to mock");
-            Box::new(MockOutput::new())
+            (Box::new(MockOutput::new()), "mock".to_string())
+        }
+    }
+}
+
+/// Try to open an ENTTEC DMX USB Pro connection. Extracted for reuse in reconnect.
+pub(crate) fn try_open_enttec_pro(
+    config: &ServerConfig,
+) -> Result<EnttecProOutput> {
+    let port_name = match &config.dmx_serial_port {
+        Some(port) => port.clone(),
+        None => {
+            let ports = serialport::available_ports()
+                .map_err(|e| anyhow::anyhow!("failed to list serial ports: {e}"))?;
+            ports
+                .iter()
+                .find(|p| p.port_name.contains("usbserial"))
+                .map(|p| p.port_name.clone())
+                .ok_or_else(|| anyhow::anyhow!(
+                    "no ENTTEC DMX USB Pro found; set DLC_SERIAL_PORT explicitly"
+                ))?
         }
     };
-    Ok(output)
+    tracing::info!("DMX output: ENTTEC DMX USB Pro on {port_name}");
+    Ok(EnttecProOutput::new(&port_name)?)
 }
 
 fn spawn_relay_task(
@@ -140,14 +164,14 @@ async fn main() -> Result<()> {
     let fixture_types = Arc::new(fixture_type_definitions);
     tracing::info!("Loaded {} fixture types", fixture_types.len());
 
-    let output = create_dmx_output(&config)?;
+    let (output, dmx_label) = create_dmx_output(&config);
 
     let (ws_broadcast, _) = tokio::sync::broadcast::channel(WS_BROADCAST_CAPACITY);
 
     let (tap_tx, tap_rx) = tokio::sync::mpsc::channel(ENGINE_TAP_CAPACITY);
     let output = Box::new(TapOutput::new(output, tap_tx));
 
-    let engine_handle = EngineHandle::start(output);
+    let engine_handle = EngineHandle::start(output, &dmx_label);
     let engine_tx = engine_handle.sender();
     let engine = Arc::new(engine_handle);
     tracing::info!("DMX engine started (44Hz loop)");
