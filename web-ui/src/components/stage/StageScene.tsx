@@ -272,7 +272,7 @@ export function StageScene() {
       onDrop={handleDrop}
     >
       <Canvas
-        camera={{ position: [0, 7, 38], fov: 50 }}
+        camera={{ position: [0, 4, 90], fov: 17 }}
         shadows
         gl={{ antialias: true, localClippingEnabled: true, toneMapping: THREE.AgXToneMapping }}
         onCreated={({ scene }) => {
