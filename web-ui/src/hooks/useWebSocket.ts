@@ -4,7 +4,14 @@ import { useDMXStore } from "../store/dmxStore";
 
 function getWsUrl(): string {
   const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
-  return `${protocol}//${window.location.host}/ws`;
+  if (import.meta.env.DEV) {
+    // Vite proxy forwards /ws to the backend WS port
+    return `${protocol}//${window.location.host}/ws`;
+  }
+  const host = window.location.hostname;
+  const port = parseInt(window.location.port || (protocol === 'wss:' ? '443' : '80'), 10);
+  const wsPort = import.meta.env.VITE_WS_PORT || port + 1;
+  return `${protocol}//${host}:${wsPort}/ws`;
 }
 
 const WS_URL = getWsUrl();

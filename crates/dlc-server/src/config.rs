@@ -1,5 +1,6 @@
 pub struct ServerConfig {
     pub port: u16,
+    pub ws_port: u16,
     pub host: String,
     pub db_path: String,
     pub static_dir: Option<String>,
@@ -14,11 +15,17 @@ const DEFAULT_SACN_PRIORITY: u8 = 100;
 
 impl ServerConfig {
     pub fn from_env() -> Self {
+        let port = std::env::var("DLC_PORT")
+            .ok()
+            .and_then(|v| v.parse().ok())
+            .unwrap_or(3000);
+        let ws_port = std::env::var("DLC_WS_PORT")
+            .ok()
+            .and_then(|v| v.parse().ok())
+            .unwrap_or(port + 1);
         Self {
-            port: std::env::var("DLC_PORT")
-                .ok()
-                .and_then(|v| v.parse().ok())
-                .unwrap_or(3000),
+            port,
+            ws_port,
             host: std::env::var("DLC_HOST").unwrap_or_else(|_| "0.0.0.0".to_string()),
             db_path: std::env::var("DLC_DB_PATH").unwrap_or_else(|_| "dlc.db".to_string()),
             static_dir: std::env::var("DLC_STATIC_DIR").ok(),

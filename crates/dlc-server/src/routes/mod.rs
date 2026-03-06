@@ -25,7 +25,7 @@ use tower_http::services::ServeDir;
 
 use crate::state::AppState;
 
-pub fn build_router(state: AppState) -> Router {
+pub fn build_api_router(state: AppState) -> Router {
     let static_dir = state.config.static_dir().to_string();
     let index_html =
         std::fs::read_to_string(format!("{static_dir}/index.html")).unwrap_or_default();
@@ -203,9 +203,7 @@ pub fn build_router(state: AppState) -> Router {
         .route(
             "/api/dmx/reconnect",
             axum::routing::post(dmx::reconnect),
-        )
-        // WebSocket
-        .route("/ws", get(ws::upgrade));
+        );
 
     Router::new()
         .merge(api_routes)
@@ -221,5 +219,12 @@ pub fn build_router(state: AppState) -> Router {
             }
         })))
         .layer(cors)
+        .with_state(state)
+}
+
+pub fn build_ws_router(state: AppState) -> Router {
+    Router::new()
+        .route("/ws", get(ws::upgrade))
+        .route("/health", get(health::health))
         .with_state(state)
 }

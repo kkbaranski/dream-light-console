@@ -6,7 +6,7 @@ use dlc_server::test_helpers::{send, spawn_test_state_with_receiver};
 #[tokio::test]
 async fn set_channel_sends_command() {
     let (state, rx) = spawn_test_state_with_receiver().await;
-    let app = routes::build_router(state);
+    let app = routes::build_api_router(state);
 
     let resp = send(
         &app,
@@ -36,7 +36,7 @@ async fn set_channel_sends_command() {
 #[tokio::test]
 async fn set_channel_invalid_channel() {
     let (state, _rx) = spawn_test_state_with_receiver().await;
-    let app = routes::build_router(state);
+    let app = routes::build_api_router(state);
 
     let resp = send(
         &app,
@@ -52,7 +52,7 @@ async fn set_channel_invalid_channel() {
 #[tokio::test]
 async fn set_channel_missing_value() {
     let (state, _rx) = spawn_test_state_with_receiver().await;
-    let app = routes::build_router(state);
+    let app = routes::build_api_router(state);
 
     let resp = send(
         &app,
@@ -69,7 +69,7 @@ async fn set_channel_missing_value() {
 #[tokio::test]
 async fn set_channel_response_body() {
     let (state, _rx) = spawn_test_state_with_receiver().await;
-    let app = routes::build_router(state);
+    let app = routes::build_api_router(state);
 
     let resp = send(
         &app,

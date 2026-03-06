@@ -8,7 +8,7 @@ use dlc_server::test_helpers::{
 #[tokio::test]
 async fn list_empty() {
     let state = spawn_test_state().await;
-    let app = routes::build_router(state);
+    let app = routes::build_api_router(state);
     let stage_id = create_stage(&app, "Stage").await;
     let concert_id = create_concert(&app, &stage_id, "Concert").await;
 
@@ -27,7 +27,7 @@ async fn list_empty() {
 #[tokio::test]
 async fn create_and_list() {
     let state = spawn_test_state().await;
-    let app = routes::build_router(state);
+    let app = routes::build_api_router(state);
     let stage_id = create_stage(&app, "Stage").await;
     let concert_id = create_concert(&app, &stage_id, "Concert").await;
 
@@ -57,7 +57,7 @@ async fn create_and_list() {
 #[tokio::test]
 async fn update_cue_list() {
     let state = spawn_test_state().await;
-    let app = routes::build_router(state);
+    let app = routes::build_api_router(state);
     let stage_id = create_stage(&app, "Stage").await;
     let concert_id = create_concert(&app, &stage_id, "Concert").await;
     let cl_id = create_cue_list(&app, &concert_id, "Original").await;
@@ -76,7 +76,7 @@ async fn update_cue_list() {
 #[tokio::test]
 async fn delete_cue_list() {
     let state = spawn_test_state().await;
-    let app = routes::build_router(state);
+    let app = routes::build_api_router(state);
     let stage_id = create_stage(&app, "Stage").await;
     let concert_id = create_concert(&app, &stage_id, "Concert").await;
     let cl_id = create_cue_list(&app, &concert_id, "To Delete").await;
@@ -94,7 +94,7 @@ async fn delete_cue_list() {
 #[tokio::test]
 async fn cascade_delete_with_concert() {
     let state = spawn_test_state().await;
-    let app = routes::build_router(state);
+    let app = routes::build_api_router(state);
     let stage_id = create_stage(&app, "Stage").await;
     let concert_id = create_concert(&app, &stage_id, "Concert").await;
     create_cue_list(&app, &concert_id, "CL").await;

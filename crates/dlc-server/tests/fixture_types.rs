@@ -6,7 +6,7 @@ use dlc_server::test_helpers::{body_json, send, spawn_test_state};
 #[tokio::test]
 async fn list_fixture_types() {
     let state = spawn_test_state().await;
-    let app = routes::build_router(state);
+    let app = routes::build_api_router(state);
 
     let resp = send(&app, Method::GET, "/api/fixture-types", None).await;
 
@@ -19,7 +19,7 @@ async fn list_fixture_types() {
 #[tokio::test]
 async fn get_fixture_type() {
     let state = spawn_test_state().await;
-    let app = routes::build_router(state);
+    let app = routes::build_api_router(state);
 
     let resp = send(&app, Method::GET, "/api/fixture-types/moving_head", None).await;
 
@@ -33,7 +33,7 @@ async fn get_fixture_type() {
 #[tokio::test]
 async fn get_fixture_type_not_found() {
     let state = spawn_test_state().await;
-    let app = routes::build_router(state);
+    let app = routes::build_api_router(state);
 
     let resp = send(&app, Method::GET, "/api/fixture-types/nonexistent", None).await;
 

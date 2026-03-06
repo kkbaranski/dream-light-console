@@ -6,7 +6,7 @@ use dlc_server::test_helpers::{body_json, create_fixture, send, spawn_test_state
 #[tokio::test]
 async fn create_and_get() {
     let state = spawn_test_state().await;
-    let app = routes::build_router(state);
+    let app = routes::build_api_router(state);
 
     let fixture_id = create_fixture(&app, "moving_head").await;
 
@@ -26,7 +26,7 @@ async fn create_and_get() {
 #[tokio::test]
 async fn create_invalid_type_returns_400() {
     let state = spawn_test_state().await;
-    let app = routes::build_router(state);
+    let app = routes::build_api_router(state);
 
     let resp = send(
         &app,
@@ -42,7 +42,7 @@ async fn create_invalid_type_returns_400() {
 #[tokio::test]
 async fn delete_unreferenced_fixture() {
     let state = spawn_test_state().await;
-    let app = routes::build_router(state);
+    let app = routes::build_api_router(state);
     let fixture_id = create_fixture(&app, "moving_head").await;
 
     let resp = send(
@@ -58,7 +58,7 @@ async fn delete_unreferenced_fixture() {
 #[tokio::test]
 async fn delete_referenced_fixture_returns_409() {
     let state = spawn_test_state().await;
-    let app = routes::build_router(state);
+    let app = routes::build_api_router(state);
     let fixture_id = create_fixture(&app, "moving_head").await;
 
     // Create a stage

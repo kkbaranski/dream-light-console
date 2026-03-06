@@ -8,7 +8,7 @@ use dlc_server::test_helpers::{
 #[tokio::test]
 async fn go_fires_first_cue() {
     let state = spawn_test_state().await;
-    let app = routes::build_router(state);
+    let app = routes::build_api_router(state);
     let stage_id = create_stage(&app, "Stage").await;
     let concert_id = create_concert(&app, &stage_id, "Concert").await;
     let cue_list_id = create_cue_list(&app, &concert_id, "Main").await;
@@ -29,7 +29,7 @@ async fn go_fires_first_cue() {
 #[tokio::test]
 async fn go_advances_through_cues() {
     let state = spawn_test_state().await;
-    let app = routes::build_router(state);
+    let app = routes::build_api_router(state);
     let stage_id = create_stage(&app, "Stage").await;
     let concert_id = create_concert(&app, &stage_id, "Concert").await;
     let cue_list_id = create_cue_list(&app, &concert_id, "Main").await;
@@ -60,7 +60,7 @@ async fn go_advances_through_cues() {
 #[tokio::test]
 async fn go_empty_list_returns_error() {
     let state = spawn_test_state().await;
-    let app = routes::build_router(state);
+    let app = routes::build_api_router(state);
     let stage_id = create_stage(&app, "Stage").await;
     let concert_id = create_concert(&app, &stage_id, "Concert").await;
     let cue_list_id = create_cue_list(&app, &concert_id, "Empty").await;
@@ -79,7 +79,7 @@ async fn go_empty_list_returns_error() {
 #[tokio::test]
 async fn stop_returns_no_content() {
     let state = spawn_test_state().await;
-    let app = routes::build_router(state);
+    let app = routes::build_api_router(state);
     let stage_id = create_stage(&app, "Stage").await;
     let concert_id = create_concert(&app, &stage_id, "Concert").await;
     let cue_list_id = create_cue_list(&app, &concert_id, "Main").await;

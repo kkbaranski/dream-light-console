@@ -6,7 +6,7 @@ use dlc_server::test_helpers::{body_json, create_stage, send, spawn_test_state};
 #[tokio::test]
 async fn list_empty() {
     let state = spawn_test_state().await;
-    let app = routes::build_router(state);
+    let app = routes::build_api_router(state);
 
     let resp = send(&app, Method::GET, "/api/stages", None).await;
 
@@ -18,7 +18,7 @@ async fn list_empty() {
 #[tokio::test]
 async fn create_and_get() {
     let state = spawn_test_state().await;
-    let app = routes::build_router(state);
+    let app = routes::build_api_router(state);
 
     let resp = send(
         &app,
@@ -45,7 +45,7 @@ async fn create_and_get() {
 #[tokio::test]
 async fn create_with_location() {
     let state = spawn_test_state().await;
-    let app = routes::build_router(state);
+    let app = routes::build_api_router(state);
 
     let resp = send(
         &app,
@@ -64,7 +64,7 @@ async fn create_with_location() {
 #[tokio::test]
 async fn update_partial() {
     let state = spawn_test_state().await;
-    let app = routes::build_router(state);
+    let app = routes::build_api_router(state);
     let stage_id = create_stage(&app, "Original").await;
 
     let resp = send(
@@ -81,7 +81,7 @@ async fn update_partial() {
 #[tokio::test]
 async fn delete_stage() {
     let state = spawn_test_state().await;
-    let app = routes::build_router(state);
+    let app = routes::build_api_router(state);
     let stage_id = create_stage(&app, "To Delete").await;
 
     let resp = send(
@@ -106,7 +106,7 @@ async fn delete_stage() {
 #[tokio::test]
 async fn get_not_found() {
     let state = spawn_test_state().await;
-    let app = routes::build_router(state);
+    let app = routes::build_api_router(state);
 
     let resp = send(&app, Method::GET, "/api/stages/nonexistent", None).await;
     assert_eq!(resp.status(), StatusCode::NOT_FOUND);

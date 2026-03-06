@@ -6,7 +6,7 @@ use dlc_server::test_helpers::{body_json, send, spawn_test_state};
 #[tokio::test]
 async fn concert_program_crud() {
     let state = spawn_test_state().await;
-    let app = routes::build_router(state);
+    let app = routes::build_api_router(state);
 
     let resp = send(&app, Method::POST, "/api/concert-programs", Some(r#"{"name":"Rock Set"}"#)).await;
     assert_eq!(resp.status(), StatusCode::CREATED);

@@ -8,7 +8,7 @@ use dlc_server::test_helpers::{
 #[tokio::test]
 async fn fixture_group_crud() {
     let state = spawn_test_state().await;
-    let app = routes::build_router(state);
+    let app = routes::build_api_router(state);
     let stage_id = create_stage(&app, "Stage").await;
     let concert_id = create_concert(&app, &stage_id, "Concert").await;
 

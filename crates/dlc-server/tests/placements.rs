@@ -8,7 +8,7 @@ use dlc_server::test_helpers::{
 #[tokio::test]
 async fn create_and_list_placements() {
     let state = spawn_test_state().await;
-    let app = routes::build_router(state);
+    let app = routes::build_api_router(state);
     let stage_id = create_stage(&app, "Stage").await;
     let fixture_id = create_fixture(&app, "moving_head").await;
 
@@ -24,7 +24,7 @@ async fn create_and_list_placements() {
 #[tokio::test]
 async fn cascade_delete_with_stage() {
     let state = spawn_test_state().await;
-    let app = routes::build_router(state);
+    let app = routes::build_api_router(state);
     let stage_id = create_stage(&app, "Stage").await;
     let fixture_id = create_fixture(&app, "moving_head").await;
     create_placement(&app, &stage_id, &fixture_id).await;

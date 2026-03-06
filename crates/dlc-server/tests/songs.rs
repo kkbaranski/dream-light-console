@@ -6,7 +6,7 @@ use dlc_server::test_helpers::{body_json, send, spawn_test_state};
 #[tokio::test]
 async fn song_crud() {
     let state = spawn_test_state().await;
-    let app = routes::build_router(state);
+    let app = routes::build_api_router(state);
 
     let resp = send(&app, Method::POST, "/api/songs", Some(r#"{"title":"Test Song","artist":"Test Artist"}"#)).await;
     assert_eq!(resp.status(), StatusCode::CREATED);
@@ -27,7 +27,7 @@ async fn song_crud() {
 #[tokio::test]
 async fn song_versions_and_recordings() {
     let state = spawn_test_state().await;
-    let app = routes::build_router(state);
+    let app = routes::build_api_router(state);
 
     let resp = send(&app, Method::POST, "/api/songs", Some(r#"{"title":"Song"}"#)).await;
     let song_id = body_json(resp).await["id"].as_str().unwrap().to_string();

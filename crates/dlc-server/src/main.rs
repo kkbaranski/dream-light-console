@@ -119,7 +119,6 @@ async fn main() -> Result<()> {
         .init();
 
     let config = ServerConfig::from_env();
-    let bind_addr = format!("{}:{}", config.host, config.port);
     let static_dir = config.static_dir().to_string();
 
     let db_url = format!("sqlite:{}?mode=rwc", config.db_path);
@@ -159,6 +158,9 @@ async fn main() -> Result<()> {
         fixture_types.clone(),
     );
 
+    let api_addr = format!("{}:{}", config.host, config.port);
+    let ws_addr = format!("{}:{}", config.host, config.ws_port);
+
     let state = AppState {
         config: Arc::new(config),
         db,
@@ -170,23 +172,29 @@ async fn main() -> Result<()> {
         fixture_types,
     };
 
-    let app = routes::build_router(state);
+    let api_app = routes::build_api_router(state.clone());
+    let ws_app = routes::build_ws_router(state);
 
-    tracing::info!("DreamLightConsole server listening on {bind_addr}");
+    let api_listener = tokio::net::TcpListener::bind(&api_addr).await?;
+    let ws_listener = tokio::net::TcpListener::bind(&ws_addr).await?;
+
+    tracing::info!("API listening on {api_addr}");
+    tracing::info!("WebSocket listening on {ws_addr}");
     tracing::info!("Static files: {static_dir}");
 
-    let listener = tokio::net::TcpListener::bind(&bind_addr).await?;
-
-    let shutdown_signal = async {
+    let shutdown = async {
         tokio::signal::ctrl_c()
             .await
             .expect("install Ctrl+C handler");
         tracing::info!("Shutdown signal received");
     };
+    tokio::pin!(shutdown);
 
-    axum::serve(listener, app)
-        .with_graceful_shutdown(shutdown_signal)
-        .await?;
+    tokio::select! {
+        _ = &mut shutdown => {},
+        r = axum::serve(api_listener, api_app) => { r?; },
+        r = axum::serve(ws_listener, ws_app) => { r?; },
+    }
 
     tracing::info!("DreamLightConsole server stopped");
 

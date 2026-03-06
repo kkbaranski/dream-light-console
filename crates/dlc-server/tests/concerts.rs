@@ -6,7 +6,7 @@ use dlc_server::test_helpers::{body_json, create_concert, create_stage, send, sp
 #[tokio::test]
 async fn concert_crud() {
     let state = spawn_test_state().await;
-    let app = routes::build_router(state);
+    let app = routes::build_api_router(state);
     let stage_id = create_stage(&app, "Stage").await;
     let concert_id = create_concert(&app, &stage_id, "Concert").await;
 
@@ -27,7 +27,7 @@ async fn concert_crud() {
 #[tokio::test]
 async fn status_transitions() {
     let state = spawn_test_state().await;
-    let app = routes::build_router(state);
+    let app = routes::build_api_router(state);
     let stage_id = create_stage(&app, "Stage").await;
     let concert_id = create_concert(&app, &stage_id, "Concert").await;
 
@@ -81,7 +81,7 @@ async fn status_transitions() {
 #[tokio::test]
 async fn invalid_status_transition() {
     let state = spawn_test_state().await;
-    let app = routes::build_router(state);
+    let app = routes::build_api_router(state);
     let stage_id = create_stage(&app, "Stage").await;
     let concert_id = create_concert(&app, &stage_id, "Concert").await;
 
@@ -98,7 +98,7 @@ async fn invalid_status_transition() {
 #[tokio::test]
 async fn create_concert_with_program_copies_entries() {
     let state = spawn_test_state().await;
-    let app = routes::build_router(state);
+    let app = routes::build_api_router(state);
     let stage_id = create_stage(&app, "Stage").await;
 
     let resp = send(
