@@ -115,9 +115,9 @@ export const DEVICE_REGISTRY = {
                         {name: "Gobo 1", dmxStart: 10, dmxEnd: 19, texturePath: "/textures/gobos/gobo1.png"},
                         {name: "Gobo 2", dmxStart: 20, dmxEnd: 29, texturePath: "/textures/gobos/gobo2.png"},
                         {name: "Gobo 3", dmxStart: 30, dmxEnd: 39, texturePath: "/textures/gobos/gobo3.png"},
-                        {name: "Gobo 4", dmxStart: 40, dmxEnd: 49},
-                        {name: "Gobo 5", dmxStart: 50, dmxEnd: 59},
-                        {name: "Gobo 6", dmxStart: 60, dmxEnd: 69},
+                        {name: "Gobo 4", dmxStart: 40, dmxEnd: 49, texturePath: "/textures/gobos/gobo4.png"},
+                        {name: "Gobo 5", dmxStart: 50, dmxEnd: 59, texturePath: "/textures/gobos/gobo5.png"},
+                        {name: "Gobo 6", dmxStart: 60, dmxEnd: 69, texturePath: "/textures/gobos/gobo3.png"},
                         {name: "Gobo 7", dmxStart: 70, dmxEnd: 79, texturePath: "/textures/gobos/gobo7.png"},
                     ],
                     defaultIndex: 0,
@@ -278,6 +278,78 @@ export function activeFeatures(
     });
     _featuresCache.set(mode as object, features);
     return features;
+}
+
+interface WheelSlotOverride {
+    name: string;
+    dmxStart: number;
+    dmxEnd: number;
+    hex?: string;
+    hasIntensity?: boolean;
+    texturePath?: string;
+}
+
+interface CurvePointOverride {
+    x: number;
+    y: number;
+}
+
+export interface FixtureConfigOverrides {
+    colorWheelSlots?: WheelSlotOverride[];
+    goboWheelSlots?: WheelSlotOverride[];
+    panCurve?: CurvePointOverride[];
+    tiltCurve?: CurvePointOverride[];
+}
+
+export function applyFixtureConfig(
+    features: ReadonlyArray<BoundFeature>,
+    overrides: FixtureConfigOverrides,
+): ReadonlyArray<BoundFeature> {
+    const {colorWheelSlots, goboWheelSlots, panCurve, tiltCurve} = overrides;
+    const hasOverrides =
+        (colorWheelSlots && colorWheelSlots.length > 0) ||
+        (goboWheelSlots && goboWheelSlots.length > 0) ||
+        (panCurve && panCurve.length >= 2) ||
+        (tiltCurve && tiltCurve.length >= 2);
+    if (!hasOverrides) return features;
+
+    return features.map(({feature, config}) => {
+        if (feature.type === "colorWheel" && colorWheelSlots && colorWheelSlots.length > 0) {
+            const orig = config as ColorWheelConfig;
+            return {
+                feature,
+                config: {
+                    dmx: orig.dmx,
+                    defaultIndex: 0,
+                    colors: colorWheelSlots.map(s => ({
+                        name: s.name, hex: s.hex ?? "#ffffff",
+                        dmxStart: s.dmxStart, dmxEnd: s.dmxEnd,
+                    })),
+                },
+            };
+        }
+        if (feature.type === "goboWheel" && goboWheelSlots && goboWheelSlots.length > 0) {
+            const orig = config as GoboWheelConfig;
+            return {
+                feature,
+                config: {
+                    dmx: orig.dmx,
+                    defaultIndex: 0,
+                    gobos: goboWheelSlots.map(s => ({
+                        name: s.name, dmxStart: s.dmxStart, dmxEnd: s.dmxEnd,
+                        hasIntensity: s.hasIntensity, texturePath: s.texturePath,
+                    })),
+                },
+            };
+        }
+        if (feature.type === "pan" && panCurve && panCurve.length >= 2) {
+            return {feature, config: {...config as PanConfig, responseCurve: panCurve}};
+        }
+        if (feature.type === "tilt" && tiltCurve && tiltCurve.length >= 2) {
+            return {feature, config: {...config as TiltConfig, responseCurve: tiltCurve}};
+        }
+        return {feature, config};
+    });
 }
 
 /** Returns true when the device emits light in at least one of its modes. */

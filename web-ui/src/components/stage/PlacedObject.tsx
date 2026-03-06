@@ -1,14 +1,15 @@
-import { Suspense, useEffect, useMemo } from "react";
+import { Suspense, useEffect, useMemo, useRef } from "react";
 import { useGLTF, Html } from "@react-three/drei";
 import { useFrame } from "@react-three/fiber";
 import * as THREE from "three";
 import { useStageEditorStore } from "../../store/stageEditorStore";
 import type { SceneObject } from "../../scene/types";
 import { useObjectDrag } from "../../hooks/useObjectDrag";
-import { DEVICE_REGISTRY, activeFeatures } from "../../devices/registry";
+import { DEVICE_REGISTRY, activeFeatures, applyFixtureConfig } from "../../devices/registry";
 import { DEG2RAD, type BoundFeature } from "../../devices/feature";
 import type { BeamConfig } from "../../devices/features/beam/beam";
 import { BeamRenderer, findBeamOriginNode } from "../../devices/features/beam/beam";
+import { useFixtures } from "../../api/hooks";
 
 for (const def of Object.values(DEVICE_REGISTRY)) {
   useGLTF.preload(def.modelPath);
@@ -19,7 +20,20 @@ const SELECTION_PADDING = 0.1;
 function PlacedObjectMesh({ object }: { object: SceneObject }) {
   const def        = DEVICE_REGISTRY[object.type];
   const isSelected = useStageEditorStore((state) => state.selectedIds.includes(object.id));
-  const features   = activeFeatures(def, object.mode);
+  const baseFeatures = activeFeatures(def, object.mode);
+
+  // Resolve fixture-specific overrides from live API data.
+  const fixtureConfigJson = useFixtures().data?.find(f => f.id === object.fixtureId)?.config_json;
+  const resolvedFeatures = useMemo(() => {
+    if (!fixtureConfigJson) return baseFeatures;
+    try { return applyFixtureConfig(baseFeatures, JSON.parse(fixtureConfigJson)); }
+    catch { return baseFeatures; }
+  }, [baseFeatures, fixtureConfigJson]);
+
+  // Keep a ref so useFrame always reads the latest resolved features
+  // without causing the model-cloning useMemo to re-run.
+  const featuresRef = useRef(resolvedFeatures);
+  featuresRef.current = resolvedFeatures;
 
   const { handlePointerDown, coordsVisible, coordsOpacity } = useObjectDrag(
     object,
@@ -32,6 +46,7 @@ function PlacedObjectMesh({ object }: { object: SceneObject }) {
 
   const { scene: rawScene } = useGLTF(def.modelPath);
 
+  // Model cloning only depends on baseFeatures (stable, WeakMap-cached).
   const { model, scale, offset, beamOriginNode, selectionEdges, overlayPos } =
     useMemo(() => {
       const model = rawScene.clone(true);
@@ -56,7 +71,7 @@ function PlacedObjectMesh({ object }: { object: SceneObject }) {
         -(box.min.z + box.max.z) / 2,
       ];
 
-      const beamOriginNode = findBeamOriginNode(model, features);
+      const beamOriginNode = findBeamOriginNode(model, baseFeatures);
 
       const selectionWidth  = size.x * scale + SELECTION_PADDING;
       const selectionHeight = def.targetHeight    + SELECTION_PADDING;
@@ -65,11 +80,12 @@ function PlacedObjectMesh({ object }: { object: SceneObject }) {
       const overlayPos: [number, number, number] = [selectionWidth / 2 + 0.05, selectionHeight, selectionDepth / 2 + 0.05];
 
       return { model, scale, offset, beamOriginNode, selectionEdges, overlayPos };
-    }, [rawScene, def, features]);
+    }, [rawScene, def, baseFeatures]);
 
   useEffect(() => () => { selectionEdges.dispose(); }, [selectionEdges]);
 
   useFrame(() => {
+    const features = featuresRef.current;
     for (const { feature, config } of features) {
       feature.applyToModel?.(model, object, config, features);
     }
@@ -80,7 +96,7 @@ function PlacedObjectMesh({ object }: { object: SceneObject }) {
   const rotationY = typeof raw.rotationY === "number" ? raw.rotationY : 0;
   const rotationZ = typeof raw.rotationZ === "number" ? raw.rotationZ : 0;
 
-  const beamBound = features.find((b): b is BoundFeature & { config: BeamConfig } =>
+  const beamBound = resolvedFeatures.find((b): b is BoundFeature & { config: BeamConfig } =>
     b.feature.type === "beam",
   );
 
@@ -133,7 +149,7 @@ function PlacedObjectMesh({ object }: { object: SceneObject }) {
           obj={object}
           config={beamBound.config}
           originNode={beamOriginNode}
-          boundFeatures={features}
+          boundFeatures={resolvedFeatures}
         />
       )}
     </>

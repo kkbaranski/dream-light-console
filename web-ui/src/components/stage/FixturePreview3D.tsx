@@ -103,9 +103,8 @@ export function FixturePreview3D({
       camera={{ position: [1, 1, 3], fov: 25 }}
       gl={{ antialias: true, localClippingEnabled: true, toneMapping: THREE.AgXToneMapping }}
       style={{ background: "#1f2937" }}
-      onCreated={({ scene }) => { scene.environmentIntensity = 0.17; }}
     >
-      <Environment preset="studio" />
+      <Environment preset="studio" environmentIntensity={0.17} />
 
       <Suspense fallback={null}>
         <PreviewMesh

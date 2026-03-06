@@ -32,12 +32,11 @@ export function ModelPreview({ path }: { path: string }) {
   return (
     <Canvas
       shadows
-      camera={{ position: [1, 1, 2], fov: 45 }}
+      camera={{ position: [1, 1, 2], fov: 30 }}
       gl={{ antialias: true, localClippingEnabled: true, toneMapping: THREE.AgXToneMapping }}
       style={{ background: "#1f2937" }}
-      onCreated={({ scene }) => { scene.environmentIntensity = 0.17; }}
     >
-      <Environment preset="studio" />
+      <Environment preset="studio" environmentIntensity={0.17} />
       <Suspense fallback={null}>
         <ModelMesh path={path} />
       </Suspense>

@@ -1,15 +1,29 @@
 import { useStageEditorStore } from "../../store/stageEditorStore";
-import { DEVICE_REGISTRY, activeFeatures } from "../../devices/registry";
+import { DEVICE_REGISTRY, activeFeatures, applyFixtureConfig } from "../../devices/registry";
 import { FEATURE_CATEGORIES } from "../../devices/feature";
 import type { InspectorCtx, FeatureObject, BoundFeature } from "../../devices/feature";
 import { CategorySection } from "./inspectorPrimitives";
 import type { SceneObject } from "../../scene/types";
+import { useFixtures } from "../../api/hooks";
+
+function resolveFeatures(
+  obj: SceneObject,
+  fixturesData: Array<{ id: string; config_json: string }> | undefined,
+): ReadonlyArray<BoundFeature> {
+  const base = activeFeatures(DEVICE_REGISTRY[obj.type], obj.mode);
+  if (!obj.fixtureId || !fixturesData) return base;
+  const configJson = fixturesData.find(f => f.id === obj.fixtureId)?.config_json;
+  if (!configJson) return base;
+  try { return applyFixtureConfig(base, JSON.parse(configJson)); }
+  catch { return base; }
+}
 
 /** Features present in every selected object (intersection by feature.type). */
-function sharedFeatures(selected: SceneObject[]): ReadonlyArray<BoundFeature> {
-  const featureSets = selected.map((obj) =>
-    activeFeatures(DEVICE_REGISTRY[obj.type], obj.mode),
-  );
+function sharedFeatures(
+  selected: SceneObject[],
+  fixturesData: Array<{ id: string; config_json: string }> | undefined,
+): ReadonlyArray<BoundFeature> {
+  const featureSets = selected.map(obj => resolveFeatures(obj, fixturesData));
   return featureSets[0].filter((bound) =>
     featureSets.every((set) => set.some((b) => b.feature.type === bound.feature.type)),
   );
@@ -56,6 +70,7 @@ export function ObjectInspector() {
   const moveObjects    = useStageEditorStore((state) => state.moveObjects);
   const toggleLock     = useStageEditorStore((state) => state.toggleLock);
   const removeObjects  = useStageEditorStore((state) => state.removeObjects);
+  const fixturesData   = useFixtures().data;
 
   const selected = objects.filter((o) => selectedIds.includes(o.id));
   if (selected.length === 0) return null;
@@ -64,7 +79,7 @@ export function ObjectInspector() {
   const def         = DEVICE_REGISTRY[selected[0].type];
   const count       = selected.length;
   const ctx         = buildCtx(selected, updateSelected, moveObjects, toggleLock);
-  const features    = sharedFeatures(selected);
+  const features    = sharedFeatures(selected, fixturesData);
 
   const title = allSameType
     ? count === 1 ? def.label : `${count} ${def.label}s`

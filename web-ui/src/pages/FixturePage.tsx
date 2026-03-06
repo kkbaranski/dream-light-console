@@ -42,6 +42,7 @@ interface EditableWheelSlot {
   dmxEnd: number;
   hex?: string;
   hasIntensity?: boolean;
+  texturePath?: string;
 }
 
 /** Shape of the persisted config_json blob. */
@@ -196,6 +197,86 @@ function encodeDmxValues(
   return results;
 }
 
+// ─── Available gobo textures ─────────────────────────────────────────────────
+
+const AVAILABLE_GOBO_TEXTURES = [
+  { path: "/textures/gobos/gobo1.png", label: "Gobo 1" },
+  { path: "/textures/gobos/gobo2.png", label: "Gobo 2" },
+  { path: "/textures/gobos/gobo3.png", label: "Gobo 3" },
+  { path: "/textures/gobos/gobo4.png", label: "Gobo 4" },
+  { path: "/textures/gobos/gobo5.png", label: "Gobo 5" },
+  { path: "/textures/gobos/gobo7.png", label: "Gobo 7" },
+  { path: "/textures/gobos/auto_mode.png", label: "Auto Mode" },
+];
+
+// ─── Gobo Texture Picker ─────────────────────────────────────────────────────
+
+function NoGoboPlaceholder() {
+  return (
+    <svg viewBox="0 0 24 24" className="w-full h-full text-gray-600" fill="none" stroke="currentColor" strokeWidth={1}>
+      <line x1="0" y1="0" x2="24" y2="24" />
+      <line x1="24" y1="0" x2="0" y2="24" />
+    </svg>
+  );
+}
+
+function GoboTexturePicker({ value, onChange }: { value?: string; onChange: (path?: string) => void }) {
+  const [open, setOpen] = useState(false);
+  const ref = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    if (!open) return;
+    function handleMouseDown(e: MouseEvent) {
+      if (ref.current && !ref.current.contains(e.target as Node)) setOpen(false);
+    }
+    document.addEventListener("mousedown", handleMouseDown);
+    return () => document.removeEventListener("mousedown", handleMouseDown);
+  }, [open]);
+
+  return (
+    <div className="relative" ref={ref}>
+      <button
+        onClick={() => setOpen(!open)}
+        className={`w-6 h-6 rounded border bg-gray-800 flex items-center justify-center overflow-hidden cursor-pointer ${
+          open ? "border-blue-500" : "border-gray-700 hover:border-gray-500"
+        }`}
+      >
+        {value ? (
+          <img src={value} alt="gobo" className="w-full h-full object-contain" />
+        ) : (
+          <NoGoboPlaceholder />
+        )}
+      </button>
+      {open && (
+        <div className="absolute left-0 bottom-full mb-1 bg-gray-800 border border-gray-600 rounded-lg shadow-xl z-50 p-1.5">
+          <div className="flex gap-1">
+            <button
+              onClick={() => { onChange(undefined); setOpen(false); }}
+              className={`w-8 h-8 rounded border transition-colors flex items-center justify-center bg-gray-700 flex-shrink-0 ${
+                !value ? "border-blue-500" : "border-transparent hover:border-gray-500"
+              }`}
+            >
+              <NoGoboPlaceholder />
+            </button>
+            {AVAILABLE_GOBO_TEXTURES.map((gobo) => (
+              <button
+                key={gobo.path}
+                title={gobo.label}
+                onClick={() => { onChange(gobo.path); setOpen(false); }}
+                className={`w-8 h-8 rounded border transition-colors flex items-center justify-center overflow-hidden bg-gray-700 flex-shrink-0 ${
+                  value === gobo.path ? "border-blue-500" : "border-transparent hover:border-gray-500"
+                }`}
+              >
+                <img src={gobo.path} alt={gobo.label} className="w-full h-full object-contain" />
+              </button>
+            ))}
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}
+
 // ─── Wheel Slot Editor ───────────────────────────────────────────────────────
 
 function WheelSlotEditor({
@@ -203,11 +284,13 @@ function WheelSlotEditor({
   onChange,
   showColor,
   showIntensity,
+  showGobo,
 }: {
   slots: EditableWheelSlot[];
   onChange: (slots: EditableWheelSlot[]) => void;
   showColor: boolean;
   showIntensity?: boolean;
+  showGobo?: boolean;
 }) {
   function updateSlot(index: number, patch: Partial<EditableWheelSlot>) {
     onChange(slots.map((s, i) => i === index ? { ...s, ...patch } : s));
@@ -242,6 +325,12 @@ function WheelSlotEditor({
               value={slot.hex ?? "#ffffff"}
               onChange={(e) => updateSlot(i, { hex: e.target.value })}
               className="w-6 h-6 rounded border border-gray-700 bg-transparent cursor-pointer p-0 [&::-webkit-color-swatch]:rounded [&::-webkit-color-swatch-wrapper]:p-0"
+            />
+          )}
+          {showGobo && (
+            <GoboTexturePicker
+              value={slot.texturePath}
+              onChange={(path) => updateSlot(i, { texturePath: path })}
             />
           )}
           <span className="inline-flex items-center gap-0.5 flex-shrink-0">
@@ -437,6 +526,7 @@ export function FixturePage() {
         name: g.name,
         dmxStart: g.dmxStart, dmxEnd: g.dmxEnd,
         hasIntensity: g.hasIntensity,
+        texturePath: g.texturePath,
       })));
     } else {
       setGoboWheelSlots([]);
@@ -522,6 +612,7 @@ export function FixturePage() {
               dmxStart: s.dmxStart,
               dmxEnd: s.dmxEnd,
               hasIntensity: s.hasIntensity,
+              texturePath: s.texturePath,
             })),
           },
         };
@@ -864,7 +955,7 @@ export function FixturePage() {
                               {feature.type === "goboWheel" && configOpen.goboWheel && (
                                 <div className="ml-1.5 pl-2.5 border-l border-gray-800 mt-3">
                                   <span className="text-[10px] font-semibold uppercase tracking-wider text-gray-500">Configure Slots</span>
-                                  <WheelSlotEditor slots={goboWheelSlots} onChange={setGoboWheelSlots} showColor={false} showIntensity />
+                                  <WheelSlotEditor slots={goboWheelSlots} onChange={setGoboWheelSlots} showColor={false} showIntensity showGobo />
                                 </div>
                               )}
                               {feature.type === "pan" && panCurve && configOpen.pan && (() => {
